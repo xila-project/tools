@@ -57,7 +57,7 @@ pub struct BuildArguments<'a> {
     /// New image file; an existing file is never replaced.
     #[arg(value_name = "OUTPUT")]
     output: &'a str,
-    /// Image size in bytes: a multiple of 512, at least 1049600.
+    /// Image size in bytes: a multiple of 512, from 1049600 to 2199023255040.
     #[arg(value_name = "SIZE", default_value_t = 16777216)]
     size: u64,
     /// Import this directory; host ownership and timestamps are ignored.

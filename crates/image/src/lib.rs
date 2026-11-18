@@ -54,6 +54,9 @@ const LITTLE_FS_CACHE_SIZE: usize = 256;
 /// Smallest accepted image size: the MBR and a minimal LittleFS partition.
 pub const MINIMUM_SIZE: u64 = (Mbr::MINIMUM_START_BLOCK + 2) * BLOCK_SIZE;
 
+/// Largest accepted image size: Core's block devices count blocks in a `u32`.
+pub const MAXIMUM_SIZE: u64 = u32::MAX as u64 * BLOCK_SIZE;
+
 /// Build a verified image at `output`, `size` bytes long, importing the
 /// directory `root` when given.
 ///
@@ -64,6 +67,11 @@ pub fn build(output: &Path, size: u64, root: Option<&Path>) -> Result<PathBuf> {
     if !size.is_multiple_of(BLOCK_SIZE) || size < MINIMUM_SIZE {
         return Err(
             "disk size must be a multiple of 512 and accommodate the MBR and LittleFS".into(),
+        );
+    }
+    if size > MAXIMUM_SIZE {
+        return Err(
+            format!("disk size must not exceed {MAXIMUM_SIZE} bytes (2^32 - 1 blocks)").into(),
         );
     }
     let source = root.map(source::Directory::open).transpose()?;
@@ -221,7 +229,12 @@ mod tests {
 
     #[test]
     fn rejects_sizes_that_cannot_hold_the_partition() {
-        for size in [MINIMUM_SIZE - BLOCK_SIZE, DEFAULT_SIZE + 1] {
+        for size in [
+            MINIMUM_SIZE - BLOCK_SIZE,
+            DEFAULT_SIZE + 1,
+            MAXIMUM_SIZE + BLOCK_SIZE,
+            u64::MAX - u64::MAX % BLOCK_SIZE,
+        ] {
             let path = temporary_path("size");
             assert!(build(&path, size, None).is_err());
             assert!(!path.exists());
