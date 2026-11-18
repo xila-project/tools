@@ -63,12 +63,13 @@ A profile is data, kept by its owner (Platforms keeps its profiles in
 | `--repositories-directory <DIRECTORY>` | `*.json` package repositories, written to `/configuration/system/packages/repositories/`. |
 
 Sizes must be multiples of 512 bytes and accommodate the MBR and LittleFS (at
-least 1049600 bytes; populated images need more). Import accepts regular files
-and directories with UTF-8 names, rejecting symbolic links and special files,
-even if the source tree changes during generation. It uses sorted traversal,
-zero timestamps, root ownership, directory and executable mode 0755 and other
-file mode 0644; account directories and global application data and
-configuration are 0700. Repeating a build with identical inputs and tool
+least 1049600 bytes; populated images need more), and at most 2199023255040
+bytes (2^32 - 1 blocks). Import accepts regular files and directories with
+UTF-8 names, rejecting symbolic links and special files, even if the source
+tree changes during generation. It uses sorted traversal, zero timestamps, root
+ownership, directory mode 0755, executable and library mode 0555, other file
+mode 0644; account directories and global application data and configuration
+are 0700. Repeating a build with identical inputs and tool
 versions produces identical bytes. Host-side population requires Linux or
 macOS.
 
