@@ -49,9 +49,41 @@ jobs:
       - name: "Build | Rust documentation"
         run: mise run documentation:check
 
+  # The release builds the xila executable on these runners too; build it on
+  # every pull request so that LittleFS (cc and bindgen) keeps compiling there.
+  hosts:
+    name: "Build / xila on ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      # mise.ci.toml configures Linux runners (apt packages, Cargo wrapper).
+      MISE_ENV: ""
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+    steps:
+      - name: "Setup | Checkout sources"
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: "Setup | Rust toolchain"
+        uses: jdx/mise-action@v5.2.2
+      # bindgen loads libclang; the Windows runners ship LLVM in this directory.
+      - name: "Setup | libclang for bindgen"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $directory = 'C:\Program Files\LLVM\bin'
+          if (-not (Test-Path (Join-Path $directory 'libclang.dll'))) { throw "libclang.dll not found in $directory" }
+          "LIBCLANG_PATH=$directory" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: "Build | xila executable"
+        run: mise run build:executable
+
   required:
     if: always()
-    needs: [quality, cargo]
+    needs: [quality, cargo, hosts]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -59,4 +91,5 @@ jobs:
         env:
           QUALITY: ${{ needs.quality.result }}
           CARGO: ${{ needs.cargo.result }}
-        run: test "$QUALITY" = success && test "$CARGO" = success
+          HOSTS: ${{ needs.hosts.result }}
+        run: test "$QUALITY" = success && test "$CARGO" = success && test "$HOSTS" = success

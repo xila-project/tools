@@ -145,6 +145,16 @@ jobs:
         env:
           MISE_ENV: ci
         run: mise run ci:packages
+      # Same setup as the hosts job of the CI workflow, which builds this
+      # executable on macOS and Windows for every pull request.
+      - name: "Setup | libclang for bindgen"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $directory = 'C:\Program Files\LLVM\bin'
+          if (-not (Test-Path (Join-Path $directory 'libclang.dll'))) { throw "libclang.dll not found in $directory" }
+          "LIBCLANG_PATH=$directory" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       # Every runner builds for its own host, so the host toolchain suffices.
       - name: "Build | Native executable"
         run: mise run build:release

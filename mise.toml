@@ -42,6 +42,10 @@ run = "cargo test --workspace --all-features --locked"
 description = "Build the workspace"
 run = "cargo build --workspace --all-features --locked"
 
+[tasks."build:executable"]
+description = "Build the xila executable"
+run = "cargo build --locked --package xila-tools"
+
 [tasks."build:release"]
 description = "Build the optimized xila executable"
 run = "cargo build --locked --release --package xila-tools"
