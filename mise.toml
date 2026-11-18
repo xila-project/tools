@@ -2,6 +2,70 @@
 # workspace's `mise/shared.toml`).
 [vars]
 rust_version = "1.100.0"
+cargo_llvm_cov_version = "0.9.1"
+taplo_version = "0.10.0"
+actionlint_version = "1.7.7"
+shellcheck_version = "0.11.0"
 
 [tools]
-rust = { version = "{{ vars.rust_version }}", profile = "minimal", components = ["clippy", "rustfmt"] }
+rust = { version = "{{ vars.rust_version }}", profile = "minimal", components = [
+  "clippy",
+  "rustfmt",
+  "llvm-tools-preview",
+] }
+
+[tasks."format"]
+description = "Format every Rust crate in the workspace"
+run = "cargo fmt --all"
+
+[tasks."format:check"]
+description = "Check Rust formatting"
+run = "cargo fmt --all -- --check"
+
+[tasks."lockfile:check"]
+description = "Check that Cargo.lock matches the manifests"
+run = "cargo metadata --locked --no-deps --format-version 1 > /dev/null"
+
+[tasks."check"]
+description = "Check all workspace crates and targets"
+run = "cargo check --workspace --all-targets --all-features --locked"
+
+[tasks."clippy"]
+description = "Lint all workspace crates and targets"
+run = "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings"
+
+[tasks."test"]
+description = "Run all workspace tests"
+run = "cargo test --workspace --all-features --locked"
+
+[tasks."build"]
+description = "Build the workspace"
+run = "cargo build --workspace --all-features --locked"
+
+[tasks."build:release"]
+description = "Build the optimized xila executable"
+run = "cargo build --locked --release --package xila-tools"
+
+[tasks."coverage"]
+description = "Run Rust workspace tests with LLVM coverage instrumentation"
+tools."cargo:cargo-llvm-cov" = "{{ vars.cargo_llvm_cov_version }}"
+run = "cargo llvm-cov --workspace --all-features --locked"
+
+[tasks."coverage:lcov"]
+description = "Generate an LCOV report for Codecov"
+tools."cargo:cargo-llvm-cov" = "{{ vars.cargo_llvm_cov_version }}"
+run = "cargo llvm-cov --workspace --all-features --locked --lcov --output-path lcov.info"
+
+[tasks."documentation:check"]
+description = "Build Rustdoc for all workspace crates and treat warnings as errors"
+run = "RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps --locked"
+
+[tasks."ci:toolchain"]
+description = "Install and report the mise-pinned Rust toolchain for shared CI setup"
+run = '''
+set -eu
+rustc --version
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "version={{ vars.rust_version }}" >> "$GITHUB_OUTPUT"
+fi
+'''

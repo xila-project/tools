@@ -1,0 +1,24 @@
+[package]
+name = "xila-tools-image"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Build and verify Xila file system images: a Xila MBR, a Xila partition and LittleFS"
+
+[dependencies]
+abi_definitions = { workspace = true }
+authentication = { workspace = true }
+file_system = { workspace = true }
+little_fs = { workspace = true }
+memory = { workspace = true }
+shared = { workspace = true }
+users = { workspace = true }
+critical-section = { workspace = true, features = ["std"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[lib]
+name = "xila_tools_image"

@@ -1,0 +1,21 @@
+[package]
+name = "xila-tools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The xila command line: Xila developer tools for file system images and packages"
+
+[dependencies]
+image = { workspace = true }
+package_builder = { workspace = true }
+getargs = { workspace = true }
+getargs-derive = { workspace = true }
+
+[lib]
+name = "xila_tools"
+
+[[bin]]
+name = "xila"
+path = "src/main.rs"

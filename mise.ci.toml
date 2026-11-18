@@ -1,0 +1,34 @@
+# CI-only configuration, loaded with MISE_ENV=ci.
+
+# Route Cargo through mr-boxington when the shared setup-rust action enables it.
+[wrappers.cargo]
+command = "env"
+args = [
+  "{% if env.XILA_MBX | default(value='0') == '1' %}mbx{% else %}cargo{% endif %}",
+]
+env = { MBX_CARGO_SHIM_MODE = "1" }
+
+# Core's LittleFS bindings are generated with bindgen, which needs libclang.
+[bootstrap.packages]
+"apt:clang" = { env = "ci" }
+"apt:libclang-dev" = { env = "ci" }
+
+[tasks."ci:packages"]
+description = "Install the native packages needed to build Core's LittleFS bindings"
+run = "mise -E ci bootstrap packages apply --manager apt --update --yes"
+
+# Called by the workspace's reusable quality workflow.
+[tasks."ci:format-rust"]
+description = "Check Rust formatting"
+run = "cargo fmt --all -- --check"
+
+[tasks."ci:format-toml"]
+description = "Check TOML formatting"
+tools.taplo = "{{ vars.taplo_version }}"
+run = "taplo format --check"
+
+[tasks."ci:lint-workflows"]
+description = "Run actionlint with ShellCheck on the GitHub Actions workflows"
+tools."aqua:rhysd/actionlint" = "{{ vars.actionlint_version }}"
+tools."aqua:koalaman/shellcheck" = "{{ vars.shellcheck_version }}"
+run = "actionlint"

@@ -1,0 +1,17 @@
+name: Nanobom
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * 2"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    name: "Security / Nanobom inventory"
+    uses: xila-project/workspace/.github/workflows/nanobom.yml@b216689233e8eaac92653bedaff417d82797d15e
+    with:
+      project: tools
+    secrets:
+      NANOBOM_TOKEN: ${{ secrets.NANOBOM_TOKEN }}
