@@ -50,7 +50,6 @@ jobs:
         run: mise run documentation:check
 
   required:
-    name: "Gate / Required checks"
     if: always()
     needs: [quality, cargo]
     runs-on: ubuntu-latest
