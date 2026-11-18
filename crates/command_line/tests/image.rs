@@ -236,14 +236,17 @@ fn optional_capacity_defaults_when_population_flags_follow_output() {
 
 #[test]
 fn unsupported_entries_and_non_utf8_names_are_rejected() {
-    use std::os::unix::{ffi::OsStringExt, fs::PermissionsExt, net::UnixListener};
+    use std::os::unix::{ffi::OsStringExt, fs::PermissionsExt};
     let fixture = Fixture::new();
-    let socket = fixture.0.join("root/socket");
-    let listener = UnixListener::bind(&socket).unwrap();
-    assert!(!fixture.build("socket.img").status.success());
-    assert!(!fixture.0.join("socket.img").exists());
-    drop(listener);
-    fs::remove_file(socket).unwrap();
+    // A FIFO is a special file like a socket, but its path has no length
+    // limit, so the test works under any temporary directory.
+    let fifo = fixture.0.join("root/fifo");
+    let name = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes()).unwrap();
+    // SAFETY: `name` is a valid NUL-terminated path.
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+    assert!(!fixture.build("fifo.img").status.success());
+    assert!(!fixture.0.join("fifo.img").exists());
+    fs::remove_file(fifo).unwrap();
     let invalid = fixture
         .0
         .join("root")

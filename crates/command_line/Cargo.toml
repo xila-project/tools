@@ -13,6 +13,9 @@ package_builder = { workspace = true }
 getargs = { workspace = true }
 getargs-derive = { workspace = true }
 
+[target.'cfg(unix)'.dev-dependencies]
+libc = { workspace = true }
+
 [lib]
 name = "xila_tools"
 
