@@ -24,10 +24,7 @@ shared = { package = "xila-shared", git = "https://github.com/xila-project/core"
 users = { package = "xila-users", git = "https://github.com/xila-project/core", branch = "main" }
 
 # - package_manager
-# Temporary: the command-line library is not on package_manager main yet
-# (xila-project/package_manager#59). Switch to `branch = "main"` and run
-# `cargo update -p xila-package-builder` once it is merged.
-package_builder = { package = "xila-package-builder", git = "https://github.com/xila-project/package_manager", branch = "feat/builder-library" }
+package_builder = { package = "xila-package-builder", git = "https://github.com/xila-project/package_manager", branch = "main" }
 
 # - External crates
 critical-section = { version = "1.2" }
