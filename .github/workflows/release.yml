@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
       - name: "Setup | Rust toolchain"
-        uses: jdx/mise-action@v5.2.2
+        uses: jdx/mise-action@v5.2.9
       - name: "Publish | Prepare version pull request"
         uses: release-plz/action@v0.5
         with:
@@ -59,7 +59,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
       - name: "Setup | Rust toolchain"
-        uses: jdx/mise-action@v5.2.2
+        uses: jdx/mise-action@v5.2.9
       - name: "Setup | Release configuration"
         id: release-config
         shell: bash
@@ -139,7 +139,7 @@ jobs:
           ref: ${{ needs.release.outputs.tag }}
           persist-credentials: false
       - name: "Setup | Rust toolchain"
-        uses: jdx/mise-action@v5.2.2
+        uses: jdx/mise-action@v5.2.9
       - name: "Setup | Native build dependencies"
         if: runner.os == 'Linux'
         env:
