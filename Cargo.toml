@@ -27,6 +27,8 @@ package_builder = { package = "xila-package-builder", git = "https://github.com/
 
 # - External crates
 critical-section = { version = "1.2" }
+# Same requirement as Core, which leaves the executor platform to the executable.
+embassy-executor = { version = "0.10", default-features = false }
 getargs = { version = "0.5", default-features = false }
 # Same exact pin as package_manager's xila-package command line.
 getargs-derive = { version = "=0.1.0", default-features = false }

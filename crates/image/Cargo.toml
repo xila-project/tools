@@ -15,6 +15,13 @@ memory = { workspace = true }
 shared = { workspace = true }
 users = { workspace = true }
 critical-section = { workspace = true, features = ["std"] }
+# Core's task crate references Embassy's `__pender` and leaves the executor
+# platform to the executable: use Embassy's std one, as Platforms' std drivers
+# do. Linkers that keep unused sections (MSVC) fail without it.
+embassy-executor = { workspace = true, features = [
+  "platform-std",
+  "executor-thread",
+] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

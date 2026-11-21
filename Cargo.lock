@@ -1870,6 +1870,7 @@ name = "xila-tools-image"
 version = "0.1.0"
 dependencies = [
  "critical-section",
+ "embassy-executor",
  "libc",
  "xila-authentication",
  "xila-file-system",
