@@ -1,7 +1,7 @@
 # Keep the compiler aligned with the shared Xila pin (`rust_version` in the
 # workspace's `mise/shared.toml`).
 [vars]
-rust_version = "1.100.0"
+rust_version = "1.97.0"
 cargo_llvm_cov_version = "0.9.1"
 taplo_version = "0.10.0"
 actionlint_version = "1.7.7"
