@@ -193,7 +193,6 @@ mod tests {
     use super::*;
     #[test]
     fn rejects_a_file_replaced_by_a_symlink_after_validation() {
-        crate::link_abi_memory_exports();
         let root = std::env::temp_dir().join(format!("xila-source-race-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir(&root).unwrap();
@@ -220,7 +219,6 @@ mod tests {
 mod mutation_tests {
     use super::*;
     fn temporary(name: &str) -> std::path::PathBuf {
-        crate::link_abi_memory_exports();
         let root = std::env::temp_dir().join(format!("xila-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir(&root).unwrap();

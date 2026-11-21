@@ -67,6 +67,7 @@ impl ManagerTrait for HostMemoryManager {
 
     unsafe fn reallocate(
         &self,
+        capabilities: CapabilityFlags,
         old_pointer: NonNull<u8>,
         old_layout: Layout,
         new_layout: Layout,
@@ -77,7 +78,7 @@ impl ManagerTrait for HostMemoryManager {
             return None;
         }
         // SAFETY: `new_layout` has a non-zero size.
-        let new_pointer = unsafe { self.allocate(CapabilityFlags::empty(), new_layout) }?;
+        let new_pointer = unsafe { self.allocate(capabilities, new_layout) }?;
         let length = old_layout.size().min(new_layout.size());
         // SAFETY: the caller guarantees `old_pointer` is a live block of
         // `old_layout`, and the new block is distinct and at least `length`
@@ -96,17 +97,6 @@ impl ManagerTrait for HostMemoryManager {
     fn get_free(&self) -> usize {
         (isize::MAX as usize).saturating_sub(self.get_used())
     }
-}
-
-/// Pull the ABI memory exports into the executable.
-///
-/// LittleFS calls these C ABI symbols from its allocator hooks, so they must
-/// be linked even though no Rust code calls them. [`crate::build`] calls this
-/// function; code that uses LittleFS directly should call it too.
-pub fn link_abi_memory_exports() {
-    std::hint::black_box(abi_definitions::xila_memory_allocate as *const ());
-    std::hint::black_box(abi_definitions::xila_memory_deallocate as *const ());
-    std::hint::black_box(&abi_definitions::XILA_MEMORY_CAPABILITIES_NONE as *const _ as usize);
 }
 
 /// Install [`HostMemoryManager`] as the global allocator and Xila memory
@@ -156,18 +146,24 @@ mod tests {
             let pointer = manager.allocate(CapabilityFlags::empty(), layout).unwrap();
             pointer.as_ptr().write_bytes(0x5A, 64);
             // Shrinking to zero fails and keeps the original block valid.
-            assert!(manager.reallocate(pointer, layout, empty).is_none());
+            assert!(
+                manager
+                    .reallocate(CapabilityFlags::empty(), pointer, layout, empty)
+                    .is_none()
+            );
             assert_eq!(manager.get_used(), 64);
             assert_eq!(pointer.as_ptr().add(63).read(), 0x5A);
 
             // Growing from a zero-sized block allocates without copying.
             let grown = manager
-                .reallocate(NonNull::dangling(), empty, layout)
+                .reallocate(CapabilityFlags::empty(), NonNull::dangling(), empty, layout)
                 .unwrap();
             manager.deallocate(grown, layout);
 
             let larger = Layout::from_size_align(128, 8).unwrap();
-            let pointer = manager.reallocate(pointer, layout, larger).unwrap();
+            let pointer = manager
+                .reallocate(CapabilityFlags::empty(), pointer, layout, larger)
+                .unwrap();
             assert_eq!(manager.get_used(), 128);
             assert_eq!(pointer.as_ptr().add(63).read(), 0x5A);
             manager.deallocate(pointer, larger);

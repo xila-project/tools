@@ -22,7 +22,7 @@ mod profile;
 mod source;
 
 pub use drive::FileDrive;
-pub use memory::{HostMemoryManager, link_abi_memory_exports};
+pub use memory::HostMemoryManager;
 pub use profile::{Profile, ProfileFile, ProfileSources, Staging, package_identifier, stage};
 
 #[doc(hidden)]
@@ -62,7 +62,6 @@ pub const MAXIMUM_SIZE: u64 = u32::MAX as u64 * BLOCK_SIZE;
 ///
 /// Returns the absolute path of the image. The output must not exist yet.
 pub fn build(output: &Path, size: u64, root: Option<&Path>) -> Result<PathBuf> {
-    link_abi_memory_exports();
     let output = canonicalize_parent(output)?;
     if !size.is_multiple_of(BLOCK_SIZE) || size < MINIMUM_SIZE {
         return Err(

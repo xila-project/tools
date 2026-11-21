@@ -8,7 +8,6 @@ repository.workspace = true
 description = "Build and verify Xila file system images: a Xila MBR, a Xila partition and LittleFS"
 
 [dependencies]
-abi_definitions = { workspace = true }
 authentication = { workspace = true }
 file_system = { workspace = true }
 little_fs = { workspace = true }

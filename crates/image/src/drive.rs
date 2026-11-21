@@ -1,7 +1,7 @@
 //! A block device backed by a host file, for building images on the host.
 
 use file_system::{
-    ControlCommand, ControlCommandIdentifier, DirectBaseOperations, DirectBlockDevice, Error,
+    ControlCommand, ControlCommandIdentifier, DirectBaseOperations, DirectBlockDevice, IoErrorKind,
     MountOperations, Size,
     block_device::{GET_BLOCK_COUNT, GET_BLOCK_SIZE},
 };
@@ -17,7 +17,7 @@ use std::{
 /// Block device over an existing host file, with 512-byte blocks.
 ///
 /// The file is never created or resized: create it with its final size first.
-/// Reads and writes outside the file fail with [`Error::InvalidParameter`]
+/// Reads and writes outside the file fail with [`IoErrorKind::InvalidArgument`]
 /// instead of being shortened or extending it, and they transfer the whole
 /// buffer or fail. [`FileDrive::close`] releases the file even when the drive
 /// itself must stay alive, as LittleFS requires `'static` devices.
@@ -62,7 +62,7 @@ impl FileDrive {
         Ok(Self(Mutex::new(Some(OpenFile { file, length }))))
     }
 
-    /// Close the file. Later operations fail with [`Error::NotMounted`].
+    /// Close the file. Later operations fail with [`IoErrorKind::DeviceUnavailable`].
     pub fn close(&self) {
         if let Ok(mut file) = self.0.lock() {
             file.take();
@@ -74,20 +74,24 @@ impl FileDrive {
         operation: impl FnOnce(&mut OpenFile) -> io::Result<T>,
     ) -> file_system::Result<T> {
         let mut guard: MutexGuard<'_, Option<OpenFile>> =
-            self.0.lock().map_err(|_| Error::RessourceBusy)?;
-        let file = guard.as_mut().ok_or(Error::NotMounted)?;
+            self.0.lock().map_err(|_| IoErrorKind::ResourceBusy)?;
+        let file = guard.as_mut().ok_or(IoErrorKind::DeviceUnavailable)?;
         operation(file).map_err(map_error)
     }
 }
 
-fn map_error(error: io::Error) -> Error {
+fn map_error(error: io::Error) -> IoErrorKind {
     match error.kind() {
-        io::ErrorKind::PermissionDenied => Error::PermissionDenied,
-        io::ErrorKind::NotFound => Error::NotFound,
-        io::ErrorKind::AlreadyExists => Error::AlreadyExists,
-        io::ErrorKind::InvalidInput => Error::InvalidParameter,
-        io::ErrorKind::InvalidData => Error::InvalidFile,
-        _ => Error::Unknown,
+        io::ErrorKind::PermissionDenied => IoErrorKind::PermissionDenied,
+        io::ErrorKind::NotFound => IoErrorKind::NotFound,
+        io::ErrorKind::AlreadyExists => IoErrorKind::AlreadyExists,
+        io::ErrorKind::InvalidInput => IoErrorKind::InvalidArgument,
+        io::ErrorKind::InvalidData => IoErrorKind::InvalidData,
+        io::ErrorKind::Interrupted => IoErrorKind::Interrupted,
+        io::ErrorKind::WriteZero => IoErrorKind::WriteZero,
+        io::ErrorKind::OutOfMemory => IoErrorKind::OutOfMemory,
+        io::ErrorKind::Unsupported => IoErrorKind::Unsupported,
+        _ => IoErrorKind::InputOutput,
     }
 }
 
@@ -137,7 +141,7 @@ impl DirectBaseOperations for FileDrive {
             let length = pattern
                 .len()
                 .checked_mul(count)
-                .ok_or(Error::InvalidParameter)?;
+                .ok_or(IoErrorKind::InvalidArgument)?;
             // Whole repetitions of the pattern, so that every chunk starts
             // with its first byte.
             let mut buffer = [0_u8; Self::PATTERN_BUFFER_SIZE];
@@ -185,7 +189,7 @@ impl DirectBaseOperations for FileDrive {
                 *GET_BLOCK_COUNT::cast_output(output)? = block_count(length)?;
                 Ok(())
             }
-            _ => Err(Error::UnsupportedOperation),
+            _ => Err(IoErrorKind::Unsupported),
         })
     }
 }
@@ -193,7 +197,8 @@ impl DirectBaseOperations for FileDrive {
 /// Number of whole blocks in `length` bytes, which must fit the `u32` that
 /// Core's block devices report.
 fn block_count(length: u64) -> file_system::Result<u32> {
-    u32::try_from(length / Size::from(FileDrive::BLOCK_SIZE)).map_err(|_| Error::InvalidParameter)
+    u32::try_from(length / Size::from(FileDrive::BLOCK_SIZE))
+        .map_err(|_| IoErrorKind::InvalidArgument)
 }
 
 impl MountOperations for FileDrive {
@@ -239,10 +244,13 @@ mod tests {
                 AnyByLayout::NONE,
                 AnyByLayout::from_mutable(&mut output),
             ),
-            Err(Error::UnsupportedOperation)
+            Err(IoErrorKind::Unsupported)
         );
         drive.unmount().unwrap();
-        assert_eq!(drive.read_sync(&mut buffer, 0), Err(Error::NotMounted));
+        assert_eq!(
+            drive.read_sync(&mut buffer, 0),
+            Err(IoErrorKind::DeviceUnavailable)
+        );
         std::fs::remove_file(path).unwrap();
     }
 
@@ -253,19 +261,19 @@ mod tests {
         let mut buffer = [0; 8];
         assert_eq!(
             drive.read_sync(&mut buffer, 2044),
-            Err(Error::InvalidParameter)
+            Err(IoErrorKind::InvalidArgument)
         );
         assert_eq!(
             drive.read_sync(&mut buffer, u64::MAX),
-            Err(Error::InvalidParameter)
+            Err(IoErrorKind::InvalidArgument)
         );
         assert_eq!(
             drive.write_sync(&buffer, 2041),
-            Err(Error::InvalidParameter)
+            Err(IoErrorKind::InvalidArgument)
         );
         assert_eq!(
             drive.write_pattern_sync(&[0xFF], 513, 3 * 512),
-            Err(Error::InvalidParameter)
+            Err(IoErrorKind::InvalidArgument)
         );
         assert_eq!(drive.write_sync(&buffer, 2040).unwrap(), 8);
         assert_eq!(drive.read_sync(&mut buffer, 2040).unwrap(), 8);
@@ -313,7 +321,7 @@ mod tests {
         );
         assert_eq!(
             block_count((u64::from(u32::MAX) + 1) * block),
-            Err(Error::InvalidParameter)
+            Err(IoErrorKind::InvalidArgument)
         );
     }
 
