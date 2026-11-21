@@ -187,6 +187,20 @@ mod tests {
             let pointer = manager
                 .allocate(CapabilityFlags::AlwaysAccessible, layout)
                 .unwrap();
+            pointer.as_ptr().write_bytes(0x5A, layout.size());
+
+            // A reallocation that asks for an unsupported capability fails and
+            // leaves the original block, its contents and the usage intact.
+            let larger = Layout::from_size_align(64, 8).unwrap();
+            assert!(
+                manager
+                    .reallocate(CapabilityFlags::Executable, pointer, layout, larger)
+                    .is_none()
+            );
+            assert_eq!(manager.get_used(), layout.size());
+            let contents = core::slice::from_raw_parts(pointer.as_ptr(), layout.size());
+            assert!(contents.iter().all(|byte| *byte == 0x5A));
+
             manager.deallocate(pointer, layout);
         }
         assert_eq!(manager.get_used(), 0);

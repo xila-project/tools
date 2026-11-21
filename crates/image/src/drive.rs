@@ -87,6 +87,8 @@ fn map_error(error: io::Error) -> IoErrorKind {
         io::ErrorKind::AlreadyExists => IoErrorKind::AlreadyExists,
         io::ErrorKind::InvalidInput => IoErrorKind::InvalidArgument,
         io::ErrorKind::InvalidData => IoErrorKind::InvalidData,
+        io::ErrorKind::TimedOut => IoErrorKind::TimedOut,
+        io::ErrorKind::WouldBlock => IoErrorKind::WouldBlock,
         io::ErrorKind::Interrupted => IoErrorKind::Interrupted,
         io::ErrorKind::WriteZero => IoErrorKind::WriteZero,
         io::ErrorKind::OutOfMemory => IoErrorKind::OutOfMemory,
