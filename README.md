@@ -4,11 +4,131 @@
 [Try Xila](https://platforms.xila.dev/) ·
 [Community](https://matrix.to/#/#xila:anneraud.fr)
 
-Developer tools for [Xila](https://www.xila.dev/), behind one command line: the
-`xila` executable (Cargo package `xila-tools`).
+[![CI](https://github.com/xila-project/tools/actions/workflows/ci.yml/badge.svg)](https://github.com/xila-project/tools/actions/workflows/ci.yml) [![Rust coverage](https://codecov.io/gh/xila-project/tools/graph/badge.svg)](https://codecov.io/gh/xila-project/tools)
+<!-- Vulnerabilities badge: to be added by the repository owner once the Nanobom project exists. -->
 
-This repository is being bootstrapped. See [`AGENTS.md`](AGENTS.md) for its
-responsibilities and its place in the Xila dependency graph.
+Developer tools for [Xila](https://www.xila.dev/), behind one command line: the
+`xila` executable (Cargo package `xila-tools`; it cannot be named `xila`,
+which is Core's facade crate).
+
+## Install
+
+Download an archive of the `xila` executable for Linux (x86_64, ARM64), macOS
+(ARM64) or Windows (x86_64) from the
+[releases](https://github.com/xila-project/tools/releases), with its SHA-256
+checksum, or build it from source:
+
+```sh
+cargo install --locked --git https://github.com/xila-project/tools xila-tools
+```
+
+## Usage
+
+```sh
+xila --help
+xila image build --help
+xila package --help
+```
+
+### File system images
+
+`xila image build` creates a raw disk with the Xila MBR signature, a Xila
+partition and LittleFS. It exclusively creates its output, remounts it, and
+verifies the imported contents and metadata. Existing output files are never
+replaced, and an incomplete output is removed on failure.
+
+```sh
+# Empty disk (16 MiB by default).
+xila image build empty.img
+# Import a directory; host ownership and timestamps are deliberately ignored.
+xila image build populated.img 16777216 --root ./root
+# Seed a profile from verified application bundle directories (xila.clock/, ...).
+xila image build native.img 16777216 \
+  --profile profiles/native.txt \
+  --bundles-directory bundles \
+  --shortcuts profiles/native-shortcuts.txt \
+  --shortcuts-directory shortcuts \
+  --repositories-directory repositories
+```
+
+A profile is data, kept by its owner (Platforms keeps its profiles in
+`tools/fs_image`):
+
+| Option | Content |
+| --- | --- |
+| `--profile <FILE>` | Guest applications, one per line; `pixel_painter` is seeded from the bundle `xila.pixel-painter` into `/applications/bundles/`. The file stem names the profile. |
+| `--bundles-directory <DIRECTORY>` | Verified bundle directories named by package identifier, each with `.xila/manifest.json`. |
+| `--shortcuts <FILE>` | Native applications whose shortcuts are seeded, one per line. |
+| `--shortcuts-directory <DIRECTORY>` | `<name>.json` for each listed shortcut, written to `/configuration/shared/applications/shortcuts/`. |
+| `--repositories-directory <DIRECTORY>` | `*.json` package repositories, written to `/configuration/system/packages/repositories/`. |
+
+Sizes must be multiples of 512 bytes and accommodate the MBR and LittleFS (at
+least 1049600 bytes; populated images need more), and at most 2199023255040
+bytes (2^32 - 1 blocks). Import accepts regular files and directories with
+UTF-8 names, rejecting symbolic links and special files, even if the source
+tree changes during generation. It uses sorted traversal, zero timestamps, root
+ownership, directory mode 0755, executable and library mode 0555, other file
+mode 0644; account directories and global application data and configuration
+are 0700. Repeating a build with identical inputs and tool
+versions produces identical bytes. Host-side population requires Linux or
+macOS.
+
+### Packages
+
+`xila package` is the `xila-package` command line of
+[`package_manager`](https://github.com/xila-project/package_manager), embedded
+from its library: the same subcommands (`manifest`, `bundle`, `key`,
+`registry`, `verify`, `pack`) and the same code.
+
+```sh
+xila package bundle init ./weather community.weather 1.0.0 wasm32-wasip1 1 \
+  --entrypoint executables/weather.wasm --display-name Weather
+xila package bundle build ./weather ./Weather.app
+xila package bundle archive ./Weather.app ./Weather.xpk
+```
+
+## Workspace
+
+| Crate | Responsibility |
+| --- | --- |
+| `xila-tools-image` (`crates/image`) | Image engine library: profiles, staging, a host file-backed drive and memory manager, LittleFS population and verification |
+| `xila-tools` (`crates/command_line`) | The `xila` executable: argument parsing only, calling the libraries |
+
+## Place in the Xila dependency graph
+
+`A ← B` means B depends on A.
+
+```text
+core, package_manager ← tools ← platforms
+```
+
+`tools` depends on Core and `package_manager` only, never on Platforms or
+Applications. Platforms depends on the `xila-tools-image` library through Git
+(`branch = "main"`), so its `Cargo.lock` pins `tools` and unifies Core with the
+firmware: an image is always built by the Core revision of the firmware that
+mounts it. Platforms keeps its profiles, shortcuts and repositories and a thin
+image builder that passes them to the library.
+
+## Development
+
+```sh
+mise run format:check
+mise run clippy
+mise run test
+mise run coverage
+```
+
+Building Core's LittleFS bindings needs libclang (`mise run ci:packages` with
+`MISE_ENV=ci` installs it on Debian and Ubuntu).
+
+## Releases
+
+Release-plz runs in git-only mode: no crate is published to crates.io. Only
+`xila-tools` gets tags (`xila-tools-v<version>`), GitHub Releases and archives
+of the `xila` executable. Releases occur after merging the release-plz version
+bump pull request. The initial version is already `0.1.0`, so the first release
+is published once by running the release workflow manually with
+`bootstrap_initial_release`.
 
 ## License
 

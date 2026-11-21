@@ -1,0 +1,30 @@
+[package]
+name = "xila-tools-image"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Build and verify Xila file system images: a Xila MBR, a Xila partition and LittleFS"
+
+[dependencies]
+authentication = { workspace = true }
+file_system = { workspace = true }
+little_fs = { workspace = true }
+memory = { workspace = true }
+shared = { workspace = true }
+users = { workspace = true }
+critical-section = { workspace = true, features = ["std"] }
+# Core's task crate references Embassy's `__pender` and leaves the executor
+# platform to the executable: use Embassy's std one, as Platforms' std drivers
+# do. Linkers that keep unused sections (MSVC) fail without it.
+embassy-executor = { workspace = true, features = [
+  "platform-std",
+  "executor-thread",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[lib]
+name = "xila_tools_image"

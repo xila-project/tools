@@ -31,6 +31,28 @@ core, package_manager ← tools ← platforms
 - Profiles, shortcuts, repositories and other image data stay in Platforms. The
   image library receives them as paths or values.
 
+# Build & Test Commands
+
+- Format Rust: `mise run format` (check: `mise run format:check`)
+- Check, lint and test: `mise run check`, `mise run clippy`, `mise run test`
+- Coverage: `mise run coverage`
+- Documentation: `mise run documentation:check`
+- CI tasks (`MISE_ENV=ci`): `ci:packages` (libclang for Core's LittleFS
+  bindings), `ci:format-rust`, `ci:format-toml`, `ci:lint-workflows`
+
+All task names use `<namespace>:<command>`.
+
+# Crates
+
+- `crates/image` (`xila-tools-image`): the image engine library. Platforms
+  depends on it, so keep its public API (`build`, `build_profile`, `stage`,
+  `Profile`, `ProfileSources`, `instantiate_global_allocator!`) stable, and
+  keep images byte-for-byte reproducible.
+- `crates/command_line` (`xila-tools`): the `xila` executable. It parses
+  arguments with getargs-derive (as `package_manager` does) and calls the
+  libraries; `xila package` embeds `package_manager`'s `xila-package` command
+  line.
+
 # Architecture & Implementation Guidelines
 
 - Use full words in every name and text: `file_system`, not `fs`;

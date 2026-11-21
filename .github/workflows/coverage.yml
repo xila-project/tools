@@ -1,0 +1,47 @@
+name: Rust coverage
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-coverage-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MISE_ENV: ci
+  CARGO_TERM_COLOR: always
+
+jobs:
+  coverage:
+    name: Rust unit and integration coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: "Setup | Checkout sources"
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: "Setup | Activate mise"
+        uses: jdx/mise-action@v5.2.2
+      - name: "Setup | Native build dependencies"
+        run: mise run ci:packages
+      - name: "Test | Generate LLVM coverage"
+        run: mise run coverage:lcov
+      - name: "Report | Upload LCOV artifact"
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-coverage-lcov
+          path: lcov.info
+          if-no-files-found: error
+      - name: "Report | Publish Codecov report"
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: false

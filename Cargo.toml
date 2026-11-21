@@ -1,0 +1,40 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+repository = "https://github.com/xila-project/tools"
+
+[workspace.dependencies]
+# - Tools crates
+image = { package = "xila-tools-image", path = "crates/image" }
+
+# - Core (keep the same URLs and `branch = "main"` as the other Xila repositories
+#   so that Cargo unifies them; Cargo.lock holds the exact commit)
+authentication = { package = "xila-authentication", git = "https://github.com/xila-project/core", branch = "main" }
+file_system = { package = "xila-file-system", git = "https://github.com/xila-project/core", branch = "main" }
+little_fs = { package = "xila-little-fs", git = "https://github.com/xila-project/core", branch = "main" }
+memory = { package = "xila-memory", git = "https://github.com/xila-project/core", branch = "main" }
+shared = { package = "xila-shared", git = "https://github.com/xila-project/core", branch = "main" }
+users = { package = "xila-users", git = "https://github.com/xila-project/core", branch = "main" }
+
+# - package_manager
+package_builder = { package = "xila-package-builder", git = "https://github.com/xila-project/package_manager", branch = "main" }
+
+# - External crates
+critical-section = { version = "1.2" }
+# Same requirement as Core, which leaves the executor platform to the executable.
+embassy-executor = { version = "0.10", default-features = false }
+getargs = { version = "0.5", default-features = false }
+# Same exact pin as package_manager's xila-package command line.
+getargs-derive = { version = "=0.1.0", default-features = false }
+libc = { version = "0.2" }
+
+# Core's LittleFS bindings carry Xila's configuration; patch them as Core and
+# Platforms do so that every repository builds the same LittleFS.
+[patch.crates-io]
+littlefs2-sys = { git = "https://github.com/xila-project/core", branch = "main" }
