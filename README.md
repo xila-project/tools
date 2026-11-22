@@ -30,9 +30,17 @@ xila package --help
 ### File system images
 
 `xila image build` creates a raw disk with the Xila MBR signature, a Xila
-partition and LittleFS. It exclusively creates its output, remounts it, and
-verifies the imported contents and metadata. Existing output files are never
-replaced, and an incomplete output is removed on failure.
+partition and LittleFS on 512-byte blocks. It exclusively creates its output,
+remounts it, and verifies the imported contents and metadata. Existing output
+files are never replaced, and an incomplete output is removed on failure.
+
+`--layout raw` builds LittleFS on the whole image instead, with no MBR, to be
+written straight to a flash partition that the firmware mounts with LittleFS.
+LittleFS records the block size and block count in its superblock and refuses
+any other geometry, so the image size must be the partition size and
+`--block-size` the flash erase size (4096 by default for raw images; a power
+of two from 512 to 65536). A raw image starts erased (every byte `0xFF`) and
+uses the firmware's LittleFS options (cache 256, block cycles 500).
 
 ```sh
 # Empty disk (16 MiB by default).
@@ -46,6 +54,8 @@ xila image build native.img 16777216 \
   --shortcuts profiles/native-shortcuts.txt \
   --shortcuts-directory shortcuts \
   --repositories-directory repositories
+# LittleFS for a flash partition of 3312 blocks of 4096 bytes, without an MBR.
+xila image build storage.img 13565952 --layout raw --block-size 4096 --root ./root
 ```
 
 A profile is data, kept by its owner (Platforms keeps its profiles in
@@ -59,9 +69,10 @@ A profile is data, kept by its owner (Platforms keeps its profiles in
 | `--shortcuts-directory <DIRECTORY>` | `<name>.json` for each listed shortcut, written to `/configuration/shared/applications/shortcuts/`. |
 | `--repositories-directory <DIRECTORY>` | `*.json` package repositories, written to `/configuration/system/packages/repositories/`. |
 
-Sizes must be multiples of 512 bytes and accommodate the MBR and LittleFS (at
-least 1049600 bytes; populated images need more), and at most 2199023255040
-bytes (2^32 - 1 blocks). Import accepts regular files and directories with
+Sizes must be multiples of the block size. MBR images must accommodate the MBR
+and LittleFS (at least 1049600 bytes; populated images need more); raw images
+must hold at least two blocks. Images hold at most 2^32 - 1 blocks
+(2199023255040 bytes for MBR images). Import accepts regular files and directories with
 UTF-8 names, rejecting symbolic links and special files, even if the source
 tree changes during generation. It uses sorted traversal, zero timestamps, root
 ownership, directory mode 0755, executable and library mode 0555, other file
@@ -88,7 +99,7 @@ xila package bundle archive ./Weather.app ./Weather.xpk
 
 | Crate | Responsibility |
 | --- | --- |
-| `xila-tools-image` (`crates/image`) | Image engine library: profiles, staging, a host file-backed drive and memory manager, LittleFS population and verification |
+| `xila-tools-image` (`crates/image`) | Image engine library: profiles, staging, image geometry (MBR or raw, block size), a host file-backed drive and memory manager, LittleFS population and verification |
 | `xila-tools` (`crates/command_line`) | The `xila` executable: argument parsing only, calling the libraries |
 
 ## Place in the Xila dependency graph

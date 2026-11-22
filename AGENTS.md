@@ -45,9 +45,12 @@ All task names use `<namespace>:<command>`.
 # Crates
 
 - `crates/image` (`xila-tools-image`): the image engine library. Platforms
-  depends on it, so keep its public API (`build`, `build_profile`, `stage`,
+  depends on it, so keep its public API (`build`, `build_profile`,
+  `build_with`, `build_profile_with`, `Geometry`, `Layout`, `stage`,
   `Profile`, `ProfileSources`, `instantiate_global_allocator!`) stable, and
-  keep images byte-for-byte reproducible.
+  keep images byte-for-byte reproducible. `build` and `build_profile` keep the
+  MBR layout on 512-byte blocks; raw images must match the geometry and
+  LittleFS options of the firmware that mounts them.
 - `crates/command_line` (`xila-tools`): the `xila` executable. It parses
   arguments with getargs-derive (as `package_manager` does) and calls the
   libraries; `xila package` embeds `package_manager`'s `xila-package` command

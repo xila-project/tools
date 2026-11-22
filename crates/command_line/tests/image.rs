@@ -66,11 +66,21 @@ impl Fixture {
     }
 
     fn build_profile(&self, name: &str, profile: &str, bundles: &Path) -> Output {
+        self.build_profile_with(name, profile, bundles, &["4194304"])
+    }
+
+    fn build_profile_with(
+        &self,
+        name: &str,
+        profile: &str,
+        bundles: &Path,
+        geometry: &[&str],
+    ) -> Output {
         let data = self.0.join("profile");
         self.xila()
             .args(["image", "build"])
             .arg(self.0.join(name))
-            .arg("4194304")
+            .args(geometry)
             .arg("--profile")
             .arg(data.join(format!("profiles/{profile}.txt")))
             .arg("--bundles-directory")
@@ -311,4 +321,73 @@ fn invalid_command_lines_fail_without_output() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).starts_with("xila: "));
     assert!(!fixture.0.join("invalid.img").exists());
+}
+
+/// Size of the WT32-SC01 Plus `storage` partition: 3312 blocks of 4096 bytes.
+const FLASH_PARTITION_SIZE: &str = "13565952";
+
+#[test]
+fn raw_flash_profiles_are_reproducible_and_have_no_master_boot_record() {
+    let fixture = Fixture::new();
+    let bundles = fixture.0.join("bundles");
+    for application in [
+        "calculator",
+        "clock",
+        "digits",
+        "pixel_painter",
+        "synth",
+        "text_editor",
+    ] {
+        write_bundle(&bundles, application);
+    }
+    let geometry = [
+        FLASH_PARTITION_SIZE,
+        "--layout",
+        "raw",
+        "--block-size",
+        "4096",
+    ];
+    for name in ["flash-one.img", "flash-two.img"] {
+        let output = fixture.build_profile_with(name, "browser", &bundles, &geometry);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout)
+                .contains("Verified raw LittleFS contents and metadata"),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+    let image = fs::read(fixture.0.join("flash-one.img")).unwrap();
+    assert_eq!(image, fs::read(fixture.0.join("flash-two.img")).unwrap());
+    assert_eq!(image.len().to_string(), FLASH_PARTITION_SIZE);
+    assert!(image[8..16] == *b"littlefs" || image[4096 + 8..4096 + 16] == *b"littlefs");
+    assert_ne!(image[510..512], [0x55, 0xAA]);
+    let contains = |content: &[u8]| image.windows(content.len()).any(|bytes| bytes == content);
+    assert!(contains(b"guest fixture for synth"));
+    assert!(contains(b"/applications/executables/terminal"));
+    assert!(contains(REPOSITORY.as_bytes()));
+}
+
+#[test]
+fn invalid_geometries_create_no_image() {
+    let fixture = Fixture::new();
+    for geometry in [
+        &["4194304", "--block-size", "4096"][..],
+        &["4194304", "--layout", "raw", "--block-size", "3000"],
+        &["4194560", "--layout", "raw", "--block-size", "4096"],
+    ] {
+        let output = fixture
+            .xila()
+            .args(["image", "build"])
+            .arg(fixture.0.join("invalid.img"))
+            .args(geometry)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{geometry:?}");
+        assert!(!fixture.0.join("invalid.img").exists());
+    }
 }
