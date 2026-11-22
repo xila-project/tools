@@ -543,6 +543,64 @@ mod tests {
     }
 
     #[test]
+    fn profiles_are_built_with_the_chosen_geometry() {
+        let bundles = temporary_path("profile-bundles");
+        fs::create_dir_all(&bundles).unwrap();
+        let profile = Profile {
+            name: "flash".into(),
+            applications: Vec::new(),
+            shortcuts: vec![ProfileFile {
+                name: "terminal.json".into(),
+                content: b"terminal shortcut".to_vec(),
+            }],
+            repositories: vec![ProfileFile {
+                name: "xila.json".into(),
+                content: b"xila repository".to_vec(),
+            }],
+        };
+        let flash = temporary_path("profile-flash");
+        let geometry = Geometry::raw(FLASH_BLOCK_SIZE);
+        build_profile_with(&flash, FLASH_PARTITION_SIZE, &profile, &bundles, geometry).unwrap();
+        let file_system = mount_flash(&flash, FLASH_BLOCK_SIZE).unwrap();
+        assert_eq!(
+            read_file(
+                &file_system,
+                "/configuration/shared/applications/shortcuts/terminal.json"
+            ),
+            b"terminal shortcut"
+        );
+        assert_eq!(
+            read_file(
+                &file_system,
+                "/configuration/system/packages/repositories/xila.json"
+            ),
+            b"xila repository"
+        );
+        drop(file_system);
+
+        let disk = temporary_path("profile-disk");
+        build_profile(&disk, MINIMUM_SIZE * 4, &profile, &bundles).unwrap();
+        assert_eq!(fs::read(&disk).unwrap()[510..512], [0x55, 0xAA]);
+
+        let invalid = temporary_path("profile-invalid");
+        assert!(
+            build_profile_with(
+                &invalid,
+                FLASH_PARTITION_SIZE + 512,
+                &profile,
+                &bundles,
+                geometry
+            )
+            .is_err()
+        );
+        assert!(!invalid.exists());
+        for path in [flash, disk] {
+            fs::remove_file(path).unwrap();
+        }
+        fs::remove_dir_all(bundles).unwrap();
+    }
+
+    #[test]
     fn raw_images_accept_the_smallest_geometry() {
         for block_size in [Geometry::MINIMUM_RAW_BLOCK_SIZE, FLASH_BLOCK_SIZE] {
             let path = temporary_path("raw-minimum");

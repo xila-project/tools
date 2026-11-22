@@ -213,15 +213,17 @@ mod tests {
         CommandLine::from_args(arguments.iter().copied()).unwrap()
     }
 
+    fn parse_build<'a>(arguments: &[&'a str]) -> BuildArguments<'a> {
+        let Command::Image(image) = parse(arguments).command else {
+            panic!("not an image")
+        };
+        let ImageCommand::Build(build) = image.command;
+        build
+    }
+
     #[test]
     fn image_build_defaults_to_sixteen_mebibytes() {
-        let command_line = parse(&["image", "build", "seed.img"]);
-        let Command::Image(ImageCommandLine {
-            command: ImageCommand::Build(arguments),
-        }) = command_line.command
-        else {
-            panic!("expected image build");
-        };
+        let arguments = parse_build(&["image", "build", "seed.img"]);
         assert_eq!(arguments.output, "seed.img");
         assert_eq!(arguments.size, image::DEFAULT_SIZE);
         assert_eq!(arguments.root, None);
@@ -248,13 +250,11 @@ mod tests {
         ] {
             let mut command_line = vec!["image", "build", "flash.img", "13565952"];
             command_line.extend_from_slice(arguments);
-            let Command::Image(ImageCommandLine {
-                command: ImageCommand::Build(build),
-            }) = parse(&command_line).command
-            else {
-                panic!("expected image build");
-            };
-            assert_eq!(build.geometry(), expected, "{arguments:?}");
+            assert_eq!(
+                parse_build(&command_line).geometry(),
+                expected,
+                "{arguments:?}"
+            );
         }
         for invalid in [
             &["image", "build", "a.img", "--layout", "gpt"][..],
