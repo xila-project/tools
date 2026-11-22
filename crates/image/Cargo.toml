@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Build and verify Xila file system images: a Xila MBR, a Xila partition and LittleFS"
+description = "Build and verify Xila file system images: LittleFS on a Xila MBR partition or on a raw flash partition"
 
 [dependencies]
 authentication = { workspace = true }

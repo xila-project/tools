@@ -1,7 +1,8 @@
 //! The `xila` command line: Xila developer tools behind one executable.
 //!
 //! - `xila image build`: build verified file system images with the
-//!   [`image`] library, the same one Platforms links into its image builder.
+//!   [`image`] library, the same one Platforms links into its image builder:
+//!   MBR disks, or raw LittleFS for flash partitions (`--layout raw`).
 //! - `xila package`: the `xila-package` command line of `package_manager`,
 //!   embedded from its library so that both run exactly the same code.
 //!
@@ -9,8 +10,8 @@
 //! [`CommandLine`]. The executable that links this library must install the
 //! Xila memory manager with [`image::instantiate_global_allocator!`].
 
-use getargs_derive::{GetArgs, Subcommand};
-use image::{Profile, ProfileSources};
+use getargs_derive::{GetArgs, Subcommand, ValueEnum};
+use image::{Geometry, Profile, ProfileSources};
 use std::{io, path::Path};
 
 /// Result of a command: any failure is reported as a boxed error.
@@ -43,23 +44,51 @@ pub struct ImageCommandLine<'a> {
 /// Subcommands of `xila image`.
 #[derive(Debug, Subcommand)]
 pub enum ImageCommand<'a> {
-    /// Create a verified raw disk: a Xila MBR, a Xila partition and LittleFS.
+    /// Create a verified image: LittleFS on a Xila MBR partition, or raw.
     Build(BuildArguments<'a>),
+}
+
+/// Where LittleFS lies in an image built by `xila image build`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Layout {
+    /// A Xila MBR and one Xila partition, on 512-byte blocks.
+    Mbr,
+    /// LittleFS on the whole image, with no MBR, for a raw flash partition.
+    Raw,
+}
+
+impl Layout {
+    /// Block size used when `--block-size` is absent: the MBR sector size, or
+    /// the usual flash erase size for raw images.
+    pub const fn default_block_size(self) -> u32 {
+        match self {
+            Self::Mbr => 512,
+            Self::Raw => 4096,
+        }
+    }
 }
 
 /// Arguments of `xila image build`.
 ///
 /// Without `--root` or `--profile`, the image is empty. With `--profile`, the
 /// image is seeded with Xila's directory layout, the listed application
-/// bundles, shortcuts and package repositories.
+/// bundles, shortcuts and package repositories. With `--layout raw`, the image
+/// holds LittleFS only, to be written to a flash partition: its size must be
+/// the partition size and its block size the flash erase size.
 #[derive(Debug, GetArgs)]
 pub struct BuildArguments<'a> {
     /// New image file; an existing file is never replaced.
     #[arg(value_name = "OUTPUT")]
     output: &'a str,
-    /// Image size in bytes: a multiple of 512, from 1049600 to 2199023255040.
+    /// Image size in bytes: a multiple of the block size; for MBR images, from 1049600 to 2199023255040.
     #[arg(value_name = "SIZE", default_value_t = 16777216)]
     size: u64,
+    /// Image layout: LittleFS on a Xila MBR partition, or on the whole image.
+    #[arg(long, value_name = "LAYOUT", value_enum, default_value_t = Layout::Mbr)]
+    layout: Layout,
+    /// Block size in bytes: 512 for MBR images; for raw images, a power of two from 512 to 65536 (default 4096).
+    #[arg(long, value_name = "BYTES")]
+    block_size: Option<u32>,
     /// Import this directory; host ownership and timestamps are ignored.
     #[arg(long, value_name = "DIRECTORY", conflicts_with = "profile")]
     root: Option<&'a str>,
@@ -112,8 +141,24 @@ pub fn execute(command_line: CommandLine<'_>) -> Result<()> {
     }
 }
 
+impl BuildArguments<'_> {
+    /// Image geometry chosen by `--layout` and `--block-size`.
+    pub fn geometry(&self) -> Geometry {
+        let block_size = self.block_size.unwrap_or(self.layout.default_block_size());
+        match self.layout {
+            Layout::Mbr => Geometry {
+                layout: image::Layout::Mbr,
+                block_size,
+            },
+            Layout::Raw => Geometry::raw(block_size),
+        }
+    }
+}
+
 fn build_image(arguments: &BuildArguments<'_>) -> Result<()> {
     let output = Path::new(arguments.output);
+    let geometry = arguments.geometry();
+    geometry.validate_size(arguments.size)?;
     let output = match arguments.profile {
         Some(applications) => {
             let profile = Profile::load(&ProfileSources {
@@ -131,15 +176,29 @@ fn build_image(arguments: &BuildArguments<'_>) -> Result<()> {
                 profile.name,
                 profile.applications.join(",")
             );
-            image::build(output, arguments.size, Some(staging.path()))?
+            image::build_with(output, arguments.size, Some(staging.path()), geometry)?
         }
-        None => image::build(output, arguments.size, arguments.root.map(Path::new))?,
+        None => image::build_with(
+            output,
+            arguments.size,
+            arguments.root.map(Path::new),
+            geometry,
+        )?,
     };
-    println!(
-        "Verified Xila MBR, LittleFS contents and metadata: {} ({} bytes)",
-        output.display(),
-        arguments.size
-    );
+    match geometry.layout {
+        image::Layout::Mbr => println!(
+            "Verified Xila MBR, LittleFS contents and metadata: {} ({} bytes)",
+            output.display(),
+            arguments.size
+        ),
+        image::Layout::Raw => println!(
+            "Verified raw LittleFS contents and metadata: {} ({} bytes, {} blocks of {} bytes)",
+            output.display(),
+            arguments.size,
+            arguments.size / u64::from(geometry.block_size),
+            geometry.block_size
+        ),
+    }
     Ok(())
 }
 
@@ -166,6 +225,49 @@ mod tests {
         assert_eq!(arguments.output, "seed.img");
         assert_eq!(arguments.size, image::DEFAULT_SIZE);
         assert_eq!(arguments.root, None);
+        assert_eq!(arguments.layout, Layout::Mbr);
+        assert_eq!(arguments.geometry(), Geometry::MBR);
+    }
+
+    #[test]
+    fn image_build_chooses_the_layout_and_block_size() {
+        for (arguments, expected) in [
+            (&["--layout", "raw"][..], Geometry::raw(4096)),
+            (
+                &["--layout", "raw", "--block-size", "512"],
+                Geometry::raw(512),
+            ),
+            (&["--layout", "mbr", "--block-size", "512"], Geometry::MBR),
+            (
+                &["--block-size", "4096"],
+                Geometry {
+                    layout: image::Layout::Mbr,
+                    block_size: 4096,
+                },
+            ),
+        ] {
+            let mut command_line = vec!["image", "build", "flash.img", "13565952"];
+            command_line.extend_from_slice(arguments);
+            let Command::Image(ImageCommandLine {
+                command: ImageCommand::Build(build),
+            }) = parse(&command_line).command
+            else {
+                panic!("expected image build");
+            };
+            assert_eq!(build.geometry(), expected, "{arguments:?}");
+        }
+        for invalid in [
+            &["image", "build", "a.img", "--layout", "gpt"][..],
+            &["image", "build", "a.img", "--block-size", "large"],
+        ] {
+            assert!(
+                CommandLine::from_args(invalid.iter().copied()).is_err(),
+                "{invalid:?}"
+            );
+        }
+        // The geometry is checked before anything is staged or created.
+        assert!(run(["image", "build", "a.img", "--block-size", "4096"].into_iter()).is_err());
+        assert!(!Path::new("a.img").exists());
     }
 
     #[test]

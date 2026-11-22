@@ -3,7 +3,7 @@
 use file_system::{
     ControlCommand, ControlCommandIdentifier, DirectBaseOperations, DirectBlockDevice, IoErrorKind,
     MountOperations, Size,
-    block_device::{GET_BLOCK_COUNT, GET_BLOCK_SIZE},
+    block_device::{ERASE, GET_BLOCK_COUNT, GET_BLOCK_SIZE},
 };
 use shared::AnyByLayout;
 use std::{
@@ -14,14 +14,22 @@ use std::{
     task::{Context, Poll},
 };
 
-/// Block device over an existing host file, with 512-byte blocks.
+/// Block device over an existing host file, with 512-byte blocks unless
+/// opened with [`FileDrive::open_with_block_size`].
 ///
 /// The file is never created or resized: create it with its final size first.
 /// Reads and writes outside the file fail with [`IoErrorKind::InvalidArgument`]
 /// instead of being shortened or extending it, and they transfer the whole
 /// buffer or fail. [`FileDrive::close`] releases the file even when the drive
 /// itself must stay alive, as LittleFS requires `'static` devices.
-pub struct FileDrive(Mutex<Option<OpenFile>>);
+///
+/// The drive rewrites in place and does not support erasing, unless
+/// [`FileDrive::with_flash_erase`] makes it erase like NOR flash.
+pub struct FileDrive {
+    file: Mutex<Option<OpenFile>>,
+    block_size: u32,
+    flash_erase: bool,
+}
 
 /// The open file and its length, fixed while the drive is open.
 struct OpenFile {
@@ -48,23 +56,72 @@ impl OpenFile {
 }
 
 impl FileDrive {
-    /// Block size of the drive, in bytes.
+    /// Default block size of the drive, in bytes: the sector size of MBR disks.
     pub const BLOCK_SIZE: u32 = 512;
+
+    /// Value of erased NOR flash bytes, written by [`FileDrive::with_flash_erase`].
+    pub const ERASED_FLASH_VALUE: u8 = 0xFF;
 
     /// Size of the stack buffer that [`DirectBaseOperations::write_pattern`]
     /// fills and writes repeatedly.
     const PATTERN_BUFFER_SIZE: usize = 4096;
 
-    /// Open an existing file for reading and writing.
+    /// Open an existing file for reading and writing, with 512-byte blocks.
+    ///
+    /// The file length need not be a multiple of the block size: the drive
+    /// reports whole blocks only.
     pub fn open(path: &Path) -> io::Result<Self> {
         let file = OpenOptions::new().read(true).write(true).open(path)?;
         let length = file.metadata()?.len();
-        Ok(Self(Mutex::new(Some(OpenFile { file, length }))))
+        Ok(Self {
+            file: Mutex::new(Some(OpenFile { file, length })),
+            block_size: Self::BLOCK_SIZE,
+            flash_erase: false,
+        })
+    }
+
+    /// Open an existing file for reading and writing, with `block_size`-byte
+    /// blocks.
+    ///
+    /// The block size must be a power of two, and the file length a multiple
+    /// of it; otherwise this fails with [`io::ErrorKind::InvalidInput`].
+    pub fn open_with_block_size(path: &Path, block_size: u32) -> io::Result<Self> {
+        if !block_size.is_power_of_two() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "the block size must be a power of two",
+            ));
+        }
+        let mut drive = Self::open(path)?;
+        drive.block_size = block_size;
+        let file = drive.file.get_mut().ok().and_then(|file| file.as_ref());
+        if file.is_none_or(|file| !file.length.is_multiple_of(u64::from(block_size))) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("the drive length must be a multiple of the block size ({block_size})"),
+            ));
+        }
+        Ok(drive)
+    }
+
+    /// Support erasing like NOR flash: erasing whole blocks sets their bytes
+    /// to [`FileDrive::ERASED_FLASH_VALUE`].
+    ///
+    /// LittleFS then writes the same bytes as on a flash partition, so an
+    /// image written to flash can be appended to there.
+    pub fn with_flash_erase(mut self) -> Self {
+        self.flash_erase = true;
+        self
+    }
+
+    /// Block size of the drive, in bytes.
+    pub fn block_size(&self) -> u32 {
+        self.block_size
     }
 
     /// Close the file. Later operations fail with [`IoErrorKind::DeviceUnavailable`].
     pub fn close(&self) {
-        if let Ok(mut file) = self.0.lock() {
+        if let Ok(mut file) = self.file.lock() {
             file.take();
         }
     }
@@ -74,9 +131,54 @@ impl FileDrive {
         operation: impl FnOnce(&mut OpenFile) -> io::Result<T>,
     ) -> file_system::Result<T> {
         let mut guard: MutexGuard<'_, Option<OpenFile>> =
-            self.0.lock().map_err(|_| IoErrorKind::ResourceBusy)?;
+            self.file.lock().map_err(|_| IoErrorKind::ResourceBusy)?;
         let file = guard.as_mut().ok_or(IoErrorKind::DeviceUnavailable)?;
         operation(file).map_err(io_error::map_std_error)
+    }
+
+    /// Write `pattern` `count` times from `position`.
+    fn fill(&self, pattern: &[u8], count: usize, position: Size) -> file_system::Result<usize> {
+        if pattern.is_empty() || count == 0 {
+            return Ok(0);
+        }
+        let length = pattern
+            .len()
+            .checked_mul(count)
+            .ok_or(IoErrorKind::InvalidArgument)?;
+        // Whole repetitions of the pattern, so that every chunk starts with
+        // its first byte.
+        let mut buffer = [0_u8; Self::PATTERN_BUFFER_SIZE];
+        let chunk = if pattern.len() <= buffer.len() {
+            let repetitions = (buffer.len() / pattern.len()).min(count);
+            let chunk = &mut buffer[..repetitions * pattern.len()];
+            for slot in chunk.chunks_exact_mut(pattern.len()) {
+                slot.copy_from_slice(pattern);
+            }
+            &buffer[..repetitions * pattern.len()]
+        } else {
+            pattern
+        };
+        self.with_file(|file| {
+            file.seek_within(position, length)?;
+            let mut remaining = length;
+            while remaining > 0 {
+                let size = remaining.min(chunk.len());
+                file.file.write_all(&chunk[..size])?;
+                remaining -= size;
+            }
+            Ok(length)
+        })
+    }
+
+    /// Erase whole blocks like NOR flash.
+    fn erase_range(&self, position: Size, size: Size) -> file_system::Result<()> {
+        let block_size = Size::from(self.block_size);
+        if !position.is_multiple_of(block_size) || !size.is_multiple_of(block_size) {
+            return Err(IoErrorKind::InvalidArgument);
+        }
+        let size = usize::try_from(size).map_err(|_| IoErrorKind::InvalidArgument)?;
+        self.fill(&[Self::ERASED_FLASH_VALUE], size, position)
+            .map(|_| ())
     }
 }
 
@@ -119,38 +221,7 @@ impl DirectBaseOperations for FileDrive {
         count: usize,
         position: Size,
     ) -> Poll<file_system::Result<usize>> {
-        file_system::ready(|| {
-            if pattern.is_empty() || count == 0 {
-                return Ok(0);
-            }
-            let length = pattern
-                .len()
-                .checked_mul(count)
-                .ok_or(IoErrorKind::InvalidArgument)?;
-            // Whole repetitions of the pattern, so that every chunk starts
-            // with its first byte.
-            let mut buffer = [0_u8; Self::PATTERN_BUFFER_SIZE];
-            let chunk = if pattern.len() <= buffer.len() {
-                let repetitions = (buffer.len() / pattern.len()).min(count);
-                let chunk = &mut buffer[..repetitions * pattern.len()];
-                for slot in chunk.chunks_exact_mut(pattern.len()) {
-                    slot.copy_from_slice(pattern);
-                }
-                &buffer[..repetitions * pattern.len()]
-            } else {
-                pattern
-            };
-            self.with_file(|file| {
-                file.seek_within(position, length)?;
-                let mut remaining = length;
-                while remaining > 0 {
-                    let size = remaining.min(chunk.len());
-                    file.file.write_all(&chunk[..size])?;
-                    remaining -= size;
-                }
-                Ok(length)
-            })
-        })
+        file_system::ready(|| self.fill(pattern, count, position))
     }
 
     fn flush(&self, _: &mut Context<'_>) -> Poll<file_system::Result<()>> {
@@ -161,29 +232,32 @@ impl DirectBaseOperations for FileDrive {
         &self,
         _: &mut Context<'_>,
         command: ControlCommandIdentifier,
-        _: &AnyByLayout,
+        input: &AnyByLayout,
         output: &mut AnyByLayout,
     ) -> Poll<file_system::Result<()>> {
         file_system::ready(|| match command {
             GET_BLOCK_SIZE::IDENTIFIER => {
-                *GET_BLOCK_SIZE::cast_output(output)? = Self::BLOCK_SIZE;
+                *GET_BLOCK_SIZE::cast_output(output)? = self.block_size;
                 Ok(())
             }
             GET_BLOCK_COUNT::IDENTIFIER => {
                 let length = self.with_file(|file| Ok(file.length))?;
-                *GET_BLOCK_COUNT::cast_output(output)? = block_count(length)?;
+                *GET_BLOCK_COUNT::cast_output(output)? = block_count(length, self.block_size)?;
                 Ok(())
+            }
+            ERASE::IDENTIFIER if self.flash_erase => {
+                let range = ERASE::cast_input(input)?;
+                self.erase_range(range.position, range.size)
             }
             _ => Err(IoErrorKind::Unsupported),
         })
     }
 }
 
-/// Number of whole blocks in `length` bytes, which must fit the `u32` that
-/// Core's block devices report.
-fn block_count(length: u64) -> file_system::Result<u32> {
-    u32::try_from(length / Size::from(FileDrive::BLOCK_SIZE))
-        .map_err(|_| IoErrorKind::InvalidArgument)
+/// Number of whole `block_size`-byte blocks in `length` bytes, which must fit
+/// the `u32` that Core's block devices report.
+fn block_count(length: u64, block_size: u32) -> file_system::Result<u32> {
+    u32::try_from(length / Size::from(block_size)).map_err(|_| IoErrorKind::InvalidArgument)
 }
 
 impl MountOperations for FileDrive {
@@ -298,16 +372,67 @@ mod tests {
 
     #[test]
     fn block_counts_beyond_u32_are_rejected() {
-        let block = u64::from(FileDrive::BLOCK_SIZE);
-        assert_eq!(block_count(u64::from(u32::MAX) * block), Ok(u32::MAX));
+        for block_size in [FileDrive::BLOCK_SIZE, 4096] {
+            let block = u64::from(block_size);
+            assert_eq!(
+                block_count(u64::from(u32::MAX) * block, block_size),
+                Ok(u32::MAX)
+            );
+            assert_eq!(
+                block_count((u64::from(u32::MAX) + 1) * block - 1, block_size),
+                Ok(u32::MAX)
+            );
+            assert_eq!(
+                block_count((u64::from(u32::MAX) + 1) * block, block_size),
+                Err(IoErrorKind::InvalidArgument)
+            );
+        }
+    }
+
+    #[test]
+    fn chosen_block_sizes_are_reported_and_validated() {
+        let path = temporary_file(4 * 4096);
+        let drive = FileDrive::open_with_block_size(&path, 4096).unwrap();
+        assert_eq!(drive.block_size(), 4096);
+        assert_eq!(drive.get_block_size().unwrap(), 4096);
+        assert_eq!(drive.get_block_count().unwrap(), 4);
+        drive.unmount().unwrap();
+        for invalid in [0, 3000] {
+            let error = FileDrive::open_with_block_size(&path, invalid)
+                .err()
+                .unwrap();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        }
+        std::fs::remove_file(path).unwrap();
+
+        let path = temporary_file(4 * 4096 + 512);
+        let error = FileDrive::open_with_block_size(&path, 4096).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert_eq!(
-            block_count((u64::from(u32::MAX) + 1) * block - 1),
-            Ok(u32::MAX)
+            FileDrive::open(&path).unwrap().get_block_count().unwrap(),
+            33
         );
-        assert_eq!(
-            block_count((u64::from(u32::MAX) + 1) * block),
-            Err(IoErrorKind::InvalidArgument)
-        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn flash_erase_sets_whole_blocks_to_the_erased_value() {
+        let path = temporary_file(4 * 4096);
+        let drive = FileDrive::open_with_block_size(&path, 4096)
+            .unwrap()
+            .with_flash_erase();
+        drive.erase(4096, 2 * 4096).unwrap();
+        for (position, size) in [(100, 4096), (4096, 100), (3 * 4096, 2 * 4096)] {
+            assert_eq!(
+                drive.erase(position, size),
+                Err(IoErrorKind::InvalidArgument)
+            );
+        }
+        drive.unmount().unwrap();
+        let mut expected = vec![0; 4 * 4096];
+        expected[4096..3 * 4096].fill(FileDrive::ERASED_FLASH_VALUE);
+        assert_eq!(std::fs::read(&path).unwrap(), expected);
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
