@@ -10,6 +10,7 @@ description = "Build and verify Xila file system images: a Xila MBR, a Xila part
 [dependencies]
 authentication = { workspace = true }
 file_system = { workspace = true }
+io_error = { workspace = true }
 little_fs = { workspace = true }
 memory = { workspace = true }
 shared = { workspace = true }
