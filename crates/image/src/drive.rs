@@ -76,24 +76,7 @@ impl FileDrive {
         let mut guard: MutexGuard<'_, Option<OpenFile>> =
             self.0.lock().map_err(|_| IoErrorKind::ResourceBusy)?;
         let file = guard.as_mut().ok_or(IoErrorKind::DeviceUnavailable)?;
-        operation(file).map_err(map_error)
-    }
-}
-
-fn map_error(error: io::Error) -> IoErrorKind {
-    match error.kind() {
-        io::ErrorKind::PermissionDenied => IoErrorKind::PermissionDenied,
-        io::ErrorKind::NotFound => IoErrorKind::NotFound,
-        io::ErrorKind::AlreadyExists => IoErrorKind::AlreadyExists,
-        io::ErrorKind::InvalidInput => IoErrorKind::InvalidArgument,
-        io::ErrorKind::InvalidData => IoErrorKind::InvalidData,
-        io::ErrorKind::TimedOut => IoErrorKind::TimedOut,
-        io::ErrorKind::WouldBlock => IoErrorKind::WouldBlock,
-        io::ErrorKind::Interrupted => IoErrorKind::Interrupted,
-        io::ErrorKind::WriteZero => IoErrorKind::WriteZero,
-        io::ErrorKind::OutOfMemory => IoErrorKind::OutOfMemory,
-        io::ErrorKind::Unsupported => IoErrorKind::Unsupported,
-        _ => IoErrorKind::InputOutput,
+        operation(file).map_err(io_error::map_std_error)
     }
 }
 
