@@ -40,11 +40,11 @@ struct OpenFile {
 impl OpenFile {
     /// Seek to `position`, checking that `length` bytes from there stay
     /// within the file.
-    fn seek_within(&mut self, position: Size, length: usize) -> io::Result<()> {
-        let end = u64::try_from(length)
-            .ok()
-            .and_then(|length| position.checked_add(length));
-        if end.is_none_or(|end| end > self.length) {
+    fn seek_within(&mut self, position: Size, length: Size) -> io::Result<()> {
+        if position
+            .checked_add(length)
+            .is_none_or(|end| end > self.length)
+        {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "access outside the drive",
@@ -159,7 +159,7 @@ impl FileDrive {
             pattern
         };
         self.with_file(|file| {
-            file.seek_within(position, length)?;
+            file.seek_within(position, length as Size)?;
             let mut remaining = length;
             while remaining > 0 {
                 let size = remaining.min(chunk.len());
@@ -171,14 +171,25 @@ impl FileDrive {
     }
 
     /// Erase whole blocks like NOR flash.
+    ///
+    /// The range is checked against the open file first, even when empty, and
+    /// erased in chunks, so that its size is not limited by `usize`.
     fn erase_range(&self, position: Size, size: Size) -> file_system::Result<()> {
         let block_size = Size::from(self.block_size);
         if !position.is_multiple_of(block_size) || !size.is_multiple_of(block_size) {
             return Err(IoErrorKind::InvalidArgument);
         }
-        let size = usize::try_from(size).map_err(|_| IoErrorKind::InvalidArgument)?;
-        self.fill(&[Self::ERASED_FLASH_VALUE], size, position)
-            .map(|_| ())
+        self.with_file(|file| {
+            file.seek_within(position, size)?;
+            let erased = [Self::ERASED_FLASH_VALUE; Self::PATTERN_BUFFER_SIZE];
+            let mut remaining = size;
+            while remaining > 0 {
+                let chunk = remaining.min(erased.len() as Size);
+                file.file.write_all(&erased[..chunk as usize])?;
+                remaining -= chunk;
+            }
+            Ok(())
+        })
     }
 }
 
@@ -192,7 +203,7 @@ impl DirectBaseOperations for FileDrive {
         // `read_exact` and `write_all` retry `ErrorKind::Interrupted`.
         file_system::ready(|| {
             self.with_file(|file| {
-                file.seek_within(position, buffer.len())?;
+                file.seek_within(position, buffer.len() as Size)?;
                 file.file.read_exact(buffer)?;
                 Ok(buffer.len())
             })
@@ -207,7 +218,7 @@ impl DirectBaseOperations for FileDrive {
     ) -> Poll<file_system::Result<usize>> {
         file_system::ready(|| {
             self.with_file(|file| {
-                file.seek_within(position, buffer.len())?;
+                file.seek_within(position, buffer.len() as Size)?;
                 file.file.write_all(buffer)?;
                 Ok(buffer.len())
             })
@@ -422,13 +433,22 @@ mod tests {
             .unwrap()
             .with_flash_erase();
         drive.erase(4096, 2 * 4096).unwrap();
-        for (position, size) in [(100, 4096), (4096, 100), (3 * 4096, 2 * 4096)] {
+        drive.erase(4 * 4096, 0).unwrap();
+        for (position, size) in [
+            (100, 4096),
+            (4096, 100),
+            (3 * 4096, 2 * 4096),
+            (5 * 4096, 0),
+            (4096, u64::MAX - 4095),
+        ] {
             assert_eq!(
                 drive.erase(position, size),
-                Err(IoErrorKind::InvalidArgument)
+                Err(IoErrorKind::InvalidArgument),
+                "{position} {size}"
             );
         }
         drive.unmount().unwrap();
+        assert_eq!(drive.erase(0, 0), Err(IoErrorKind::DeviceUnavailable));
         let mut expected = vec![0; 4 * 4096];
         expected[4096..3 * 4096].fill(FileDrive::ERASED_FLASH_VALUE);
         assert_eq!(std::fs::read(&path).unwrap(), expected);

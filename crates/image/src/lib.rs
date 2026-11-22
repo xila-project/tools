@@ -56,7 +56,7 @@ pub const BLOCK_SIZE: u64 = 512;
 /// LittleFS cache size used to format and mount images. The firmware mounts
 /// flash partitions with the same cache, and Core uses it as the lookahead
 /// size; read and program sizes are Core's (16 bytes).
-pub const LITTLE_FS_CACHE_SIZE: usize = 256;
+pub const LITTLE_FILE_SYSTEM_CACHE_SIZE: usize = 256;
 
 /// LittleFS block cycles of raw flash images, as the firmware mounts its
 /// flash partition. They decide when LittleFS moves metadata for wear
@@ -181,8 +181,12 @@ impl Geometry {
         }
         let maximum = self.maximum_size();
         if size > maximum {
+            let name = match self.layout {
+                Layout::Mbr => "disk",
+                Layout::Raw => "image",
+            };
             return Err(
-                format!("disk size must not exceed {maximum} bytes (2^32 - 1 blocks)").into(),
+                format!("{name} size must not exceed {maximum} bytes (2^32 - 1 blocks)").into(),
             );
         }
         Ok(())
@@ -200,8 +204,8 @@ impl Geometry {
     }
 
     /// LittleFS options matching the device that mounts the image.
-    pub fn little_fs_options(&self) -> little_fs::Options {
-        let options = little_fs::Options::new(LITTLE_FS_CACHE_SIZE);
+    pub fn little_file_system_options(&self) -> little_fs::Options {
+        let options = little_fs::Options::new(LITTLE_FILE_SYSTEM_CACHE_SIZE);
         match self.layout {
             Layout::Mbr => options,
             Layout::Raw => options.set_block_cycles(FLASH_BLOCK_CYCLES),
@@ -277,7 +281,7 @@ fn format_populate_and_verify(
     source: Option<&source::Directory>,
     geometry: Geometry,
 ) -> Result<()> {
-    let options = geometry.little_fs_options();
+    let options = geometry.little_file_system_options();
     {
         let drive: &'static FileDrive = Box::leak(Box::new(geometry.open(output)?));
         let result = (|| -> Result<()> {
@@ -344,11 +348,14 @@ fn create_output_file(path: &Path, size: u64) -> io::Result<()> {
         ));
     }
     // Exclusive creation prevents accidental replacement of an existing image.
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?
-        .set_len(size)
+    let file = OpenOptions::new().write(true).create_new(true).open(path)?;
+    if let Err(error) = file.set_len(size) {
+        // The file is new: remove it rather than leave an empty image.
+        drop(file);
+        let _ = std::fs::remove_file(path);
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// Resolve the parent directory of `path`, which must exist, keeping its file
@@ -368,7 +375,10 @@ crate::instantiate_global_allocator!();
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, io::Write};
+    use std::{
+        fs::{self, File},
+        io::Write,
+    };
 
     fn temporary_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -395,6 +405,13 @@ mod tests {
         let error = result.unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert!(error.to_string().contains("valid UTF-8"));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_size_the_host_refuses_leaves_no_output() {
+        let path = temporary_path("unsupported-size");
+        assert!(create_output_file(&path, u64::MAX).is_err());
         assert!(!path.exists());
     }
 
@@ -455,15 +472,150 @@ mod tests {
     const FLASH_BLOCK_SIZE: u32 = 4096;
     const FLASH_PARTITION_SIZE: u64 = 3312 * FLASH_BLOCK_SIZE as u64;
 
+    /// LittleFS mounted on a leaked drive (LittleFS requires `'static`
+    /// devices), which is closed when this is dropped.
+    struct Mounted {
+        file_system: Option<little_fs::FileSystem>,
+        drive: &'static dyn DirectBlockDevice,
+    }
+
+    impl Mounted {
+        /// Mount `drive` with the firmware's LittleFS options, closing it on
+        /// failure.
+        fn new(drive: &'static dyn DirectBlockDevice) -> file_system::Result<Self> {
+            match little_fs::FileSystem::new(
+                drive,
+                little_fs::Options::new(256).set_block_cycles(500),
+            ) {
+                Ok(file_system) => Ok(Self {
+                    file_system: Some(file_system),
+                    drive,
+                }),
+                Err(error) => {
+                    let _ = drive.unmount();
+                    Err(error)
+                }
+            }
+        }
+    }
+
+    impl std::ops::Deref for Mounted {
+        type Target = little_fs::FileSystem;
+
+        fn deref(&self) -> &Self::Target {
+            self.file_system.as_ref().unwrap()
+        }
+    }
+
+    impl Drop for Mounted {
+        fn drop(&mut self) {
+            self.file_system.take();
+            let _ = self.drive.unmount();
+        }
+    }
+
     /// Mount `path` as the firmware mounts its flash partition: a block device
     /// with `block_size`-byte blocks and the firmware's LittleFS options.
-    fn mount_flash(path: &Path, block_size: u32) -> file_system::Result<little_fs::FileSystem> {
-        let drive: &'static FileDrive = Box::leak(Box::new(
+    fn mount_flash(path: &Path, block_size: u32) -> file_system::Result<Mounted> {
+        Mounted::new(Box::leak(Box::new(
             FileDrive::open_with_block_size(path, block_size)
                 .unwrap()
                 .with_flash_erase(),
-        ));
-        little_fs::FileSystem::new(drive, little_fs::Options::new(256).set_block_cycles(500))
+        )))
+    }
+
+    /// A flash drive that programs like NOR flash: writes may only clear
+    /// bits, and setting a bit back to 1 needs an erase. Unlike real flash,
+    /// which would store the bitwise AND, such a write fails, so that any
+    /// program over bytes that are not erased is caught.
+    struct NorFlashDrive(FileDrive);
+
+    impl DirectBaseOperations for NorFlashDrive {
+        fn read(
+            &self,
+            context: &mut std::task::Context<'_>,
+            buffer: &mut [u8],
+            position: file_system::Size,
+        ) -> std::task::Poll<file_system::Result<usize>> {
+            self.0.read(context, buffer, position)
+        }
+
+        fn write(
+            &self,
+            _: &mut std::task::Context<'_>,
+            buffer: &[u8],
+            position: file_system::Size,
+        ) -> std::task::Poll<file_system::Result<usize>> {
+            file_system::ready(|| {
+                let mut current = vec![0; buffer.len()];
+                self.0.read_sync(&mut current, position)?;
+                if current
+                    .iter()
+                    .zip(buffer)
+                    .any(|(&old, &new)| new & !old != 0)
+                {
+                    return Err(file_system::IoErrorKind::InputOutput);
+                }
+                self.0.write_sync(buffer, position)
+            })
+        }
+
+        fn flush(
+            &self,
+            context: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<file_system::Result<()>> {
+            self.0.flush(context)
+        }
+
+        fn control(
+            &self,
+            context: &mut std::task::Context<'_>,
+            command: file_system::ControlCommandIdentifier,
+            input: &shared::AnyByLayout,
+            output: &mut shared::AnyByLayout,
+        ) -> std::task::Poll<file_system::Result<()>> {
+            self.0.control(context, command, input, output)
+        }
+    }
+
+    impl file_system::MountOperations for NorFlashDrive {
+        fn unmount(&self) -> file_system::Result<()> {
+            self.0.unmount()
+        }
+    }
+
+    impl DirectBlockDevice for NorFlashDrive {}
+
+    /// Mount `path` on a [`NorFlashDrive`] with 4096-byte blocks.
+    fn mount_nor_flash(path: &Path) -> file_system::Result<Mounted> {
+        Mounted::new(Box::leak(Box::new(NorFlashDrive(
+            FileDrive::open_with_block_size(path, FLASH_BLOCK_SIZE)
+                .unwrap()
+                .with_flash_erase(),
+        ))))
+    }
+
+    /// Create `path` on `file_system` and write `content` to it.
+    fn write_file(
+        file_system: &little_fs::FileSystem,
+        path: &str,
+        content: &[u8],
+    ) -> file_system::Result<()> {
+        use file_system::{AccessFlags, BaseOperations, Context, FileSystemOperations};
+
+        file_system.create_file(path.as_ref())?;
+        let mut context = Context::new_empty();
+        file_system.lookup_file(&mut context, path.as_ref(), AccessFlags::Write.into())?;
+        let mut written = 0;
+        let result = (|| {
+            while written < content.len() {
+                written +=
+                    file_system.write_sync(&mut context, &content[written..], written as u64)?;
+            }
+            Ok(())
+        })();
+        let close = file_system.close(&mut context);
+        result.and(close)
     }
 
     fn read_file(file_system: &little_fs::FileSystem, path: &str) -> Vec<u8> {
@@ -602,13 +754,78 @@ mod tests {
 
     #[test]
     fn raw_images_accept_the_smallest_geometry() {
-        for block_size in [Geometry::MINIMUM_RAW_BLOCK_SIZE, FLASH_BLOCK_SIZE] {
+        for block_size in [
+            Geometry::MINIMUM_RAW_BLOCK_SIZE,
+            FLASH_BLOCK_SIZE,
+            Geometry::MAXIMUM_RAW_BLOCK_SIZE,
+        ] {
             let path = temporary_path("raw-minimum");
             let geometry = Geometry::raw(block_size);
-            build_with(&path, geometry.minimum_size() * 8, None, geometry).unwrap();
+            assert_eq!(geometry.minimum_size(), 2 * u64::from(block_size));
+            build_with(&path, geometry.minimum_size(), None, geometry).unwrap();
             assert!(mount_flash(&path, block_size).is_ok());
             fs::remove_file(path).unwrap();
         }
+    }
+
+    #[test]
+    fn raw_images_accept_writes_on_nor_flash() {
+        let root = temporary_path("nor-root");
+        fs::create_dir_all(root.join("configuration/shared")).unwrap();
+        fs::write(root.join("configuration/shared/seed.txt"), b"seeded").unwrap();
+        let path = temporary_path("nor-image");
+        let geometry = Geometry::raw(FLASH_BLOCK_SIZE);
+        build_with(&path, FLASH_PARTITION_SIZE, Some(&root), geometry).unwrap();
+
+        // Write after mounting, as the firmware does on its first boot:
+        // LittleFS appends to the seeded metadata blocks, which must hold
+        // erased bytes after their last commit.
+        let content: Vec<u8> = (0..=255).cycle().take(2 * 4096 + 33).collect();
+        {
+            let file_system = mount_nor_flash(&path).unwrap();
+            write_file(&file_system, "/configuration/shared/written.bin", &content).unwrap();
+            write_file(&file_system, "/written.txt", b"after boot").unwrap();
+        }
+        let file_system = mount_nor_flash(&path).unwrap();
+        assert_eq!(
+            read_file(&file_system, "/configuration/shared/written.bin"),
+            content
+        );
+        assert_eq!(read_file(&file_system, "/written.txt"), b"after boot");
+        assert_eq!(
+            read_file(&file_system, "/configuration/shared/seed.txt"),
+            b"seeded"
+        );
+        drop(file_system);
+
+        // Without flash erasing, LittleFS leaves zeros where flash would be
+        // erased, and the same writes fail on NOR flash.
+        let zeroed = temporary_path("nor-zeroed");
+        File::create(&zeroed)
+            .unwrap()
+            .set_len(FLASH_PARTITION_SIZE)
+            .unwrap();
+        {
+            let drive: &'static FileDrive = Box::leak(Box::new(
+                FileDrive::open_with_block_size(&zeroed, FLASH_BLOCK_SIZE).unwrap(),
+            ));
+            let file_system =
+                little_fs::FileSystem::new_format(drive, geometry.little_file_system_options())
+                    .unwrap();
+            let source = source::Directory::open(&root).unwrap();
+            populate::populate(&file_system, Some(&source)).unwrap();
+            drop(file_system);
+            drive.close();
+        }
+        {
+            let file_system = mount_nor_flash(&zeroed).unwrap();
+            assert!(write_file(&file_system, "/written.txt", b"after boot").is_err());
+        }
+
+        for path in [path, zeroed] {
+            fs::remove_file(path).unwrap();
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
