@@ -69,3 +69,14 @@ All task names use `<namespace>:<command>`.
 
 - Keep `target/` and `.mise/` out of Git.
 - Do not add a dependency on Platforms or Applications.
+
+# Releases
+
+Tools shares the Xila operating system version with Core and Platforms. Before
+1.0, a breaking change bumps the minor version and compatible changes bump the
+patch. Submit version bumps through review. The workspace release tags the
+pinned Tools commit as `vX.Y.Z`. Keep git dependencies on `main` and build
+with `--locked`. The `xila-tools` Cargo package is intended for crates.io once
+its dependency chain supports publishing.
+
+See [the Xila release policy](https://github.com/xila-project/core/issues/276).

@@ -13,10 +13,7 @@ which is Core's facade crate).
 
 ## Install
 
-Download an archive of the `xila` executable for Linux (x86_64, ARM64), macOS
-(ARM64) or Windows (x86_64) from the
-[releases](https://github.com/xila-project/tools/releases), with its SHA-256
-checksum, or build it from source:
+Install from source:
 
 ```sh
 cargo install --locked --git https://github.com/xila-project/tools xila-tools
@@ -123,12 +120,10 @@ Building Core's LittleFS bindings needs libclang (`mise run ci:packages` with
 
 ## Releases
 
-Release-plz runs in git-only mode: no crate is published to crates.io. Only
-`xila-tools` gets tags (`xila-tools-v<version>`), GitHub Releases and archives
-of the `xila` executable. Releases occur after merging the release-plz version
-bump pull request. The initial version is already `0.1.0`, so the first release
-is published once by running the release workflow manually with
-`bootstrap_initial_release`.
+Tools ships with Core and Platforms under a shared `vX.Y.Z` tag. The
+[workspace](https://github.com/xila-project/workspace) selects the revisions
+for each Xila release. The `xila-tools` crate is planned for crates.io once its
+dependencies can be resolved there.
 
 ## License
 
