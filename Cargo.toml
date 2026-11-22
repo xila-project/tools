@@ -17,7 +17,9 @@ image = { package = "xila-tools-image", path = "crates/image" }
 #   so that Cargo unifies them; Cargo.lock holds the exact commit)
 authentication = { package = "xila-authentication", git = "https://github.com/xila-project/core", branch = "main" }
 file_system = { package = "xila-file-system", git = "https://github.com/xila-project/core", branch = "main" }
-io_error = { package = "xila-io-error", git = "https://github.com/xila-project/core", branch = "main", features = ["std"] }
+io_error = { package = "xila-io-error", git = "https://github.com/xila-project/core", branch = "main", features = [
+  "std",
+] }
 little_fs = { package = "xila-little-fs", git = "https://github.com/xila-project/core", branch = "main" }
 memory = { package = "xila-memory", git = "https://github.com/xila-project/core", branch = "main" }
 shared = { package = "xila-shared", git = "https://github.com/xila-project/core", branch = "main" }
