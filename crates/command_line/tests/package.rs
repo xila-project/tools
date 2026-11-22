@@ -30,7 +30,8 @@ fn package_bundles_are_built_signed_verified_and_archived() {
             "community.example".into(),
             "1.0.0".into(),
             "wasm32-wasip1".into(),
-            "1".into(),
+            "--xila-version".into(),
+            "0.1".into(),
             "--entrypoint".into(),
             "executables/example.wasm".into(),
         ],
@@ -73,6 +74,14 @@ fn package_bundles_are_built_signed_verified_and_archived() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+    let developer_manifest =
+        fs::read_to_string(directory.join("source/xila-package.json")).unwrap();
+    assert!(developer_manifest.contains("\"xila_version\":\"0.1\""));
+    assert!(!developer_manifest.contains("minimum_xila_abi"));
+    let runtime_manifest =
+        fs::read_to_string(directory.join("Example.app/.xila/manifest.json")).unwrap();
+    assert!(runtime_manifest.contains("\"xila_version\":\"0.1\""));
+    assert!(!runtime_manifest.contains("minimum_xila_abi"));
     let output = xila(&[
         "package",
         "verify",

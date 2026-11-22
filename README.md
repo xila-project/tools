@@ -81,7 +81,7 @@ from its library: the same subcommands (`manifest`, `bundle`, `key`,
 `registry`, `verify`, `pack`) and the same code.
 
 ```sh
-xila package bundle init ./weather community.weather 1.0.0 wasm32-wasip1 1 \
+xila package bundle init ./weather community.weather 1.0.0 wasm32-wasip1 --xila-version 0.1 \
   --entrypoint executables/weather.wasm --display-name Weather
 xila package bundle build ./weather ./Weather.app
 xila package bundle archive ./Weather.app ./Weather.xpk
