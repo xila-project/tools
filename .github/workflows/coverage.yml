@@ -28,7 +28,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Setup | Activate mise"
-        uses: jdx/mise-action@v5.2.2
+        uses: jdx/mise-action@v5.2.10
       - name: "Setup | Native build dependencies"
         run: mise run ci:packages
       - name: "Test | Generate LLVM coverage"

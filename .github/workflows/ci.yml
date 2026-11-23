@@ -68,7 +68,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Setup | Rust toolchain"
-        uses: jdx/mise-action@v5.2.2
+        uses: jdx/mise-action@v5.2.10
       # bindgen loads libclang; the Windows runners ship LLVM in this directory.
       - name: "Setup | libclang for bindgen"
         if: runner.os == 'Windows'
