@@ -66,8 +66,8 @@ pub const FLASH_BLOCK_CYCLES: u16 = 500;
 /// Smallest accepted MBR image size: the MBR and a minimal LittleFS partition.
 pub const MINIMUM_SIZE: u64 = (Mbr::MINIMUM_START_BLOCK + 2) * BLOCK_SIZE;
 
-/// Largest accepted MBR image size: Core's block devices count blocks in a
-/// `u32`.
+/// Largest accepted MBR image size: MBR partition entries store the start and
+/// the size of a partition as 32-bit sector counts.
 pub const MAXIMUM_SIZE: u64 = u32::MAX as u64 * BLOCK_SIZE;
 
 /// Where LittleFS lies in an image.
@@ -158,7 +158,9 @@ impl Geometry {
         }
     }
 
-    /// Largest image size: Core's block devices count blocks in a `u32`.
+    /// Largest image size: LittleFS counts blocks in a 32-bit `lfs_size_t`, and
+    /// MBR partition entries store 32-bit sector counts. Core's `GET_BLOCK_COUNT`
+    /// reports a 64-bit count, so the limit comes from these formats only.
     pub fn maximum_size(&self) -> u64 {
         u64::from(u32::MAX) * u64::from(self.block_size)
     }
