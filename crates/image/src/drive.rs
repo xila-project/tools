@@ -266,7 +266,9 @@ impl DirectBaseOperations for FileDrive {
 }
 
 /// Number of whole `block_size`-byte blocks in `length` bytes, as the `Size`
-/// that Core's `GET_BLOCK_COUNT` reports.
+/// that Core's `GET_BLOCK_COUNT` reports. A block size of 0 is an invalid
+/// argument; `open_with_block_size` already rejects it, so this is a defensive
+/// check only.
 fn block_count(length: u64, block_size: u32) -> file_system::Result<Size> {
     length
         .checked_div(Size::from(block_size))
@@ -387,6 +389,10 @@ mod tests {
     fn block_counts_beyond_u32_are_reported() {
         for block_size in [FileDrive::BLOCK_SIZE, 4096] {
             let block = u64::from(block_size);
+            assert_eq!(
+                block_count(u64::from(u32::MAX) * block - block, block_size),
+                Ok(u64::from(u32::MAX) - 1)
+            );
             assert_eq!(
                 block_count((u64::from(u32::MAX) + 1) * block - 1, block_size),
                 Ok(u64::from(u32::MAX))
