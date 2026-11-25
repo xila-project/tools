@@ -265,10 +265,12 @@ impl DirectBaseOperations for FileDrive {
     }
 }
 
-/// Number of whole `block_size`-byte blocks in `length` bytes, which must fit
-/// the `u32` that Core's block devices report.
-fn block_count(length: u64, block_size: u32) -> file_system::Result<u32> {
-    u32::try_from(length / Size::from(block_size)).map_err(|_| IoErrorKind::InvalidArgument)
+/// Number of whole `block_size`-byte blocks in `length` bytes, as the `Size`
+/// that Core's `GET_BLOCK_COUNT` reports.
+fn block_count(length: u64, block_size: u32) -> file_system::Result<Size> {
+    length
+        .checked_div(Size::from(block_size))
+        .ok_or(IoErrorKind::InvalidArgument)
 }
 
 impl MountOperations for FileDrive {
@@ -382,22 +384,19 @@ mod tests {
     }
 
     #[test]
-    fn block_counts_beyond_u32_are_rejected() {
+    fn block_counts_beyond_u32_are_reported() {
         for block_size in [FileDrive::BLOCK_SIZE, 4096] {
             let block = u64::from(block_size);
             assert_eq!(
-                block_count(u64::from(u32::MAX) * block, block_size),
-                Ok(u32::MAX)
-            );
-            assert_eq!(
                 block_count((u64::from(u32::MAX) + 1) * block - 1, block_size),
-                Ok(u32::MAX)
+                Ok(u64::from(u32::MAX))
             );
             assert_eq!(
                 block_count((u64::from(u32::MAX) + 1) * block, block_size),
-                Err(IoErrorKind::InvalidArgument)
+                Ok(u64::from(u32::MAX) + 1)
             );
         }
+        assert_eq!(block_count(4096, 0), Err(IoErrorKind::InvalidArgument));
     }
 
     #[test]
