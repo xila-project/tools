@@ -112,11 +112,17 @@ fn visit(
         if verify {
             verify_attributes(file_system, &path, kind)?;
         } else {
+            // The attributes are written with the entry, in its creation
+            // commits (xila-project/core#878).
+            let entry_attributes = attributes(&path, kind);
             match &entry {
-                Entry::Directory(_) => file_system.create_directory(path.as_str().as_ref())?,
-                Entry::File(_) => file_system.create_file(path.as_str().as_ref())?,
+                Entry::Directory(_) => {
+                    file_system.create_directory(path.as_str().as_ref(), &entry_attributes)?
+                }
+                Entry::File(_) => {
+                    file_system.create_file(path.as_str().as_ref(), &entry_attributes)?
+                }
             }
-            file_system.set_attributes(path.as_str().as_ref(), &attributes(&path, kind))?;
         }
         match entry {
             Entry::Directory(directory) => visit(file_system, &directory, &path, verify)?,

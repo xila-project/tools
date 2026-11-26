@@ -603,9 +603,9 @@ mod tests {
         path: &str,
         content: &[u8],
     ) -> file_system::Result<()> {
-        use file_system::{AccessFlags, BaseOperations, Context, FileSystemOperations};
+        use file_system::{AccessFlags, Attributes, BaseOperations, Context, FileSystemOperations};
 
-        file_system.create_file(path.as_ref())?;
+        file_system.create_file(path.as_ref(), &Attributes::new())?;
         let mut context = Context::new_empty();
         file_system.lookup_file(&mut context, path.as_ref(), AccessFlags::Write.into())?;
         let mut written = 0;
