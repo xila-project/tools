@@ -1,5 +1,6 @@
 //! End-to-end tests of `xila image build`, ported from Platforms' `fs_image`.
 #![cfg(any(target_os = "linux", target_os = "macos"))]
+use image::package_identifier;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -103,7 +104,7 @@ impl Drop for Fixture {
 }
 
 fn write_bundle(root: &Path, application: &str) {
-    let bundle = root.join(format!("xila.{}", application.replace('_', "-")));
+    let bundle = root.join(package_identifier(application));
     fs::create_dir_all(bundle.join(".xila")).unwrap();
     fs::create_dir_all(bundle.join("executables")).unwrap();
     fs::write(
@@ -218,7 +219,9 @@ fn missing_bundle_is_an_error_without_output() {
     }
     let output = fixture.build_profile("missing.img", "browser", &bundles);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("missing bundle xila.text-editor"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("missing bundle dev.xila.text-editor")
+    );
     assert!(!fixture.0.join("missing.img").exists());
 }
 
@@ -303,7 +306,7 @@ fn both_profiles_require_the_digits_bundle() {
             !output.status.success(),
             "{profile} silently omitted Digits"
         );
-        assert!(String::from_utf8_lossy(&output.stderr).contains("missing bundle xila.digits"));
+        assert!(String::from_utf8_lossy(&output.stderr).contains("missing bundle dev.xila.digits"));
         assert!(!fixture.0.join(image).exists());
     }
 }
