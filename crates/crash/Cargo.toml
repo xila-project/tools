@@ -1,0 +1,24 @@
+[package]
+name = "xila-tools-crash"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Read and symbolize Xila crash reports"
+
+[dependencies]
+xila_crash = { package = "xila-crash", git = "https://github.com/xila-project/core", branch = "main" }
+addr2line = { version = "0.25", default-features = false, features = ["std"] }
+base64 = "0.22"
+gimli = { version = "0.32", default-features = false, features = [
+  "read",
+  "std",
+] }
+object = { version = "0.37", default-features = false, features = [
+  "elf",
+  "read_core",
+  "compression",
+] }
+rustc-demangle = "0.1"
+sha2 = "0.11"

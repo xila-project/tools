@@ -3,6 +3,21 @@
 version = 4
 
 [[package]]
+name = "addr2line"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b5d307320b3181d6d7954e663bd7c774a838b8220fe0593c86d9fb09f498b4b"
+dependencies = [
+ "gimli",
+]
+
+[[package]]
+name = "adler2"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16,6 +31,12 @@ name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+
+[[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bindgen"
@@ -105,6 +126,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "const-oid"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be95d4a884358a21a199689323c29e9256b4a1b315e22f183d155422041d3a9a"
+
+[[package]]
 name = "cordyceps"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -131,6 +158,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "crc32fast"
+version = "1.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd9ae8fcb3ea71b0b26338b4ffb13006bb175de8fd07921089a906ce7e5e6945"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
@@ -250,6 +286,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2"
 dependencies = [
  "block-buffer",
+ "const-oid",
  "crypto-common",
 ]
 
@@ -458,6 +495,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fallible-iterator"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
+
+[[package]]
 name = "fiat-crypto"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -478,6 +521,17 @@ name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
+
+[[package]]
+name = "flate2"
+version = "1.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "626d4928326b646e70f65ed36fc7cf9f206bdb68a0019ee7c6b4709da4e084c4"
+dependencies = [
+ "crc32fast",
+ "miniz_oxide",
+ "zlib-rs",
+]
 
 [[package]]
 name = "fnv"
@@ -626,6 +680,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gimli"
+version = "0.32.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
+dependencies = [
+ "fallible-iterator",
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -759,7 +823,7 @@ checksum = "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
 [[package]]
 name = "littlefs2-sys"
 version = "0.4.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "bindgen",
  "cc",
@@ -841,6 +905,16 @@ dependencies = [
  "itoa",
  "mini-internal",
  "zmij",
+]
+
+[[package]]
+name = "miniz_oxide"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
+dependencies = [
+ "adler2",
+ "simd-adler32",
 ]
 
 [[package]]
@@ -935,6 +1009,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "object"
+version = "0.37.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
+dependencies = [
+ "flate2",
+ "memchr",
+ "ruzstd",
 ]
 
 [[package]]
@@ -1058,6 +1143,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d902046e6a28a1e4c3cab97258a0ce11e994903f01c2d97a9447a0b3df85f4f6"
 
 [[package]]
+name = "rustc-demangle"
+version = "0.1.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
+
+[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1090,6 +1181,15 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "ruzstd"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7c1c839d570d835527c9a5e4db7cb2198683a988cb9d7293fc8674e6bd58fc8"
+dependencies = [
+ "twox-hash",
+]
 
 [[package]]
 name = "scoped-tls"
@@ -1197,6 +1297,12 @@ name = "signature"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d567dcbaf0049cb8ac2608a76cd95ff9e4412e1899d389ee400918ca7537f5"
+
+[[package]]
+name = "simd-adler32"
+version = "0.3.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 
 [[package]]
 name = "slab"
@@ -1398,6 +1504,12 @@ dependencies = [
  "tracing-core",
  "tracing-log",
 ]
+
+[[package]]
+name = "twox-hash"
+version = "2.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86a801b3cea342a06d468c8710662aa29e5e05e4f5c0d62f00bbb7f2ad7941c2"
 
 [[package]]
 name = "typenum"
@@ -1618,7 +1730,7 @@ dependencies = [
 [[package]]
 name = "xila-authentication"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "embedded-i18n",
  "miniserde",
@@ -1633,7 +1745,7 @@ dependencies = [
 [[package]]
 name = "xila-c-support"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "xila-log",
  "xila-memory",
@@ -1642,9 +1754,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "xila-crash"
+version = "0.1.0"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
+
+[[package]]
 name = "xila-device"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "xila-file-system",
 ]
@@ -1652,7 +1769,7 @@ dependencies = [
 [[package]]
 name = "xila-file-system"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "bitflags 2.13.2",
  "embedded-io-async",
@@ -1667,7 +1784,7 @@ dependencies = [
 [[package]]
 name = "xila-io-error"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "embedded-i18n",
  "embedded-io",
@@ -1676,7 +1793,7 @@ dependencies = [
 [[package]]
 name = "xila-little-fs"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "littlefs2-sys",
  "xila-c-support",
@@ -1691,7 +1808,7 @@ dependencies = [
 [[package]]
 name = "xila-log"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "critical-section",
  "log",
@@ -1701,7 +1818,7 @@ dependencies = [
 [[package]]
 name = "xila-memory"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "bitflags 2.13.2",
  "critical-section",
@@ -1786,7 +1903,7 @@ dependencies = [
 [[package]]
 name = "xila-shared"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "num",
  "xila-log",
@@ -1796,7 +1913,7 @@ dependencies = [
 [[package]]
 name = "xila-stackful"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "corosensei",
  "critical-section",
@@ -1806,7 +1923,7 @@ dependencies = [
 [[package]]
 name = "xila-synchronization"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "embassy-sync",
  "portable-atomic-util",
@@ -1815,7 +1932,7 @@ dependencies = [
 [[package]]
 name = "xila-task"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "embassy-executor",
  "embassy-futures",
@@ -1835,7 +1952,7 @@ dependencies = [
 [[package]]
 name = "xila-task-macros"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "darling 0.24.1",
  "proc-macro2",
@@ -1846,7 +1963,7 @@ dependencies = [
 [[package]]
 name = "xila-time"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "embassy-time",
  "embedded-i18n",
@@ -1863,8 +1980,23 @@ dependencies = [
  "getargs",
  "getargs-derive",
  "libc",
+ "serde_json",
  "xila-package-builder",
+ "xila-tools-crash",
  "xila-tools-image",
+]
+
+[[package]]
+name = "xila-tools-crash"
+version = "0.1.0"
+dependencies = [
+ "addr2line",
+ "base64",
+ "gimli",
+ "object",
+ "rustc-demangle",
+ "sha2",
+ "xila-crash",
 ]
 
 [[package]]
@@ -1886,7 +2018,7 @@ dependencies = [
 [[package]]
 name = "xila-users"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "embedded-i18n",
  "xila-synchronization",
@@ -1895,7 +2027,7 @@ dependencies = [
 [[package]]
 name = "xila-virtual-file-system"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "embedded-io-async",
  "portable-atomic",
@@ -1912,10 +2044,16 @@ dependencies = [
 [[package]]
 name = "xila_http"
 version = "0.1.0"
-source = "git+https://github.com/xila-project/core?branch=main#372638839d646df4cf4a81a3c4628e8f7a198688"
+source = "git+https://github.com/xila-project/core?branch=main#ea3afb830775830867df82ff27d83b47788235b5"
 dependencies = [
  "httparse",
 ]
+
+[[package]]
+name = "zlib-rs"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa76918995d776d9dd34d371030be228d021137449771493d56e29f77e4148ac"
 
 [[package]]
 name = "zmij"

@@ -10,6 +10,8 @@
 //! [`CommandLine`]. The executable that links this library must install the
 //! Xila memory manager with [`image::instantiate_global_allocator!`].
 
+mod crash_command;
+
 use getargs_derive::{GetArgs, Subcommand, ValueEnum};
 use image::{Geometry, Profile, ProfileSources};
 use std::{io, path::Path};
@@ -30,6 +32,8 @@ pub struct CommandLine<'a> {
 pub enum Command<'a> {
     /// Build Xila file system images.
     Image(ImageCommandLine<'a>),
+    /// Decode Xila crash reports.
+    Crash(crash_command::CrashCommandLine<'a>),
     /// Build, sign and verify Xila packages and package registries.
     Package(package_builder::CommandLine<'a>),
 }
@@ -138,6 +142,7 @@ pub fn execute(command_line: CommandLine<'_>) -> Result<()> {
             command: ImageCommand::Build(arguments),
         }) => build_image(&arguments),
         Command::Package(command_line) => package_builder::execute(command_line),
+        Command::Crash(command_line) => crash_command::execute(command_line),
     }
 }
 

@@ -8,6 +8,8 @@ repository.workspace = true
 description = "The xila command line: Xila developer tools for file system images and packages"
 
 [dependencies]
+crash = { package = "xila-tools-crash", path = "../crash" }
+serde_json = "1.0"
 image = { workspace = true }
 package_builder = { workspace = true }
 getargs = { workspace = true }
