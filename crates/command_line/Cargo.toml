@@ -24,3 +24,12 @@ name = "xila_tools"
 [[bin]]
 name = "xila"
 path = "src/main.rs"
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+base64 = "0.22"
+object = { version = "0.37", default-features = false, features = [
+  "elf",
+  "read_core",
+] }
+sha2 = "0.11"
+xila_crash = { package = "xila-crash", git = "https://github.com/xila-project/core", branch = "main" }

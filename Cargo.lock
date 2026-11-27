@@ -1977,10 +1977,14 @@ dependencies = [
 name = "xila-tools"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "getargs",
  "getargs-derive",
  "libc",
+ "object",
  "serde_json",
+ "sha2",
+ "xila-crash",
  "xila-package-builder",
  "xila-tools-crash",
  "xila-tools-image",
