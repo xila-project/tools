@@ -56,7 +56,7 @@ pub struct Profile {
     /// Name reported in messages, such as `native`.
     pub name: String,
     /// Guest applications, by bundle name: `pixel_painter` is seeded from the
-    /// bundle directory `xila.pixel-painter`.
+    /// bundle directory `dev.xila.pixel-painter`.
     pub applications: Vec<String>,
     /// Native application shortcuts, written to
     /// `/configuration/shared/applications/shortcuts/`. Native applications
@@ -165,9 +165,9 @@ fn validate_name(name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Package identifier of an official guest application, e.g. `xila.pixel-painter`.
+/// Package identifier of an official guest application, e.g. `dev.xila.pixel-painter`.
 pub fn package_identifier(name: &str) -> String {
-    format!("xila.{}", name.replace('_', "-"))
+    format!("dev.xila.{}", name.replace('_', "-"))
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -228,7 +228,7 @@ fn copy_bundle(source: &Path, destination: &Path) -> Result<()> {
 
 /// Stage `profile` as an image source directory, from verified bundle
 /// directories named by package identifier
-/// (`<bundles>/xila.clock/.xila/manifest.json`, ...), as produced by Platforms'
+/// (`<bundles>/dev.xila.clock/.xila/manifest.json`, ...), as produced by Platforms'
 /// `xila-prepare-applications` or `xila package bundle build`.
 pub fn stage(profile: &Profile, bundles_directory: &Path) -> Result<Staging> {
     let staging = Staging::create()?;
@@ -290,8 +290,11 @@ mod tests {
 
     #[test]
     fn package_identifiers_use_dashes() {
-        assert_eq!(package_identifier("pixel_painter"), "xila.pixel-painter");
-        assert_eq!(package_identifier("clock"), "xila.clock");
+        assert_eq!(
+            package_identifier("pixel_painter"),
+            "dev.xila.pixel-painter"
+        );
+        assert_eq!(package_identifier("clock"), "dev.xila.clock");
     }
 
     #[test]
@@ -354,7 +357,7 @@ mod tests {
     #[test]
     fn stages_the_layout_bundles_and_profile_files() {
         let root = temporary("stage");
-        let bundle = root.join("bundles/xila.pixel-painter");
+        let bundle = root.join("bundles/dev.xila.pixel-painter");
         fs::create_dir_all(bundle.join(".xila")).unwrap();
         fs::write(bundle.join(".xila/manifest.json"), b"manifest").unwrap();
         let profile = Profile {
@@ -375,7 +378,7 @@ mod tests {
             assert!(path.join(directory).is_dir(), "{directory}");
         }
         assert_eq!(
-            fs::read(path.join("applications/bundles/xila.pixel-painter/.xila/manifest.json"))
+            fs::read(path.join("applications/bundles/dev.xila.pixel-painter/.xila/manifest.json"))
                 .unwrap(),
             b"manifest"
         );
@@ -397,7 +400,7 @@ mod tests {
         let mut missing = profile;
         missing.applications.push("clock".into());
         let error = stage(&missing, &root.join("bundles")).unwrap_err();
-        assert!(error.to_string().contains("missing bundle xila.clock"));
+        assert!(error.to_string().contains("missing bundle dev.xila.clock"));
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -405,7 +408,7 @@ mod tests {
     #[test]
     fn bundles_with_symbolic_links_are_rejected() {
         let root = temporary("symbolic-link");
-        let bundle = root.join("bundles/xila.clock");
+        let bundle = root.join("bundles/dev.xila.clock");
         fs::create_dir_all(bundle.join(".xila")).unwrap();
         fs::write(bundle.join(".xila/manifest.json"), b"manifest").unwrap();
         std::os::unix::fs::symlink("/etc/passwd", bundle.join("link")).unwrap();

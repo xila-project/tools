@@ -47,7 +47,7 @@ uses the firmware's LittleFS options (cache 256, block cycles 500).
 xila image build empty.img
 # Import a directory; host ownership and timestamps are deliberately ignored.
 xila image build populated.img 16777216 --root ./root
-# Seed a profile from verified application bundle directories (xila.clock/, ...).
+# Seed a profile from verified application bundle directories (dev.xila.clock/, ...).
 xila image build native.img 16777216 \
   --profile profiles/native.txt \
   --bundles-directory bundles \
@@ -63,7 +63,7 @@ A profile is data, kept by its owner (Platforms keeps its profiles in
 
 | Option | Content |
 | --- | --- |
-| `--profile <FILE>` | Guest applications, one per line; `pixel_painter` is seeded from the bundle `xila.pixel-painter` into `/applications/bundles/`. The file stem names the profile. |
+| `--profile <FILE>` | Guest applications, one per line; `pixel_painter` is seeded from the bundle `dev.xila.pixel-painter` into `/applications/bundles/`. The file stem names the profile. |
 | `--bundles-directory <DIRECTORY>` | Verified bundle directories named by package identifier, each with `.xila/manifest.json`. |
 | `--shortcuts <FILE>` | Native applications whose shortcuts are seeded, one per line. |
 | `--shortcuts-directory <DIRECTORY>` | `<name>.json` for each listed shortcut, written to `/configuration/shared/applications/shortcuts/`. |
