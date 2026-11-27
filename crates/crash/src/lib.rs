@@ -64,11 +64,10 @@ pub fn find_elf(
 }
 
 fn parse_elf(bytes: &[u8]) -> Result<object::File<'_>> {
-    let object = object::File::parse(bytes)?;
-    if object.format() != object::BinaryFormat::Elf {
+    if !bytes.starts_with(b"\x7fELF") {
         return Err("The symbols file must be an ELF file".into());
     }
-    Ok(object)
+    Ok(object::File::parse(bytes)?)
 }
 
 fn matches_identifier(
@@ -215,20 +214,32 @@ fn demangle(name: &str) -> String {
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
+    use object::ObjectSymbol as _;
     use xila_crash::{Architecture, Header, Limits, RecordKind, Writer};
 
     #[test]
     fn verifies_elf_hash_and_decodes_both_report_encodings() {
         let executable = fs::read(std::env::current_exe().unwrap()).unwrap();
         let identifier = BuildIdentifier::ElfSha256(Sha256::digest(&executable).into());
+        let object = parse_elf(&executable).unwrap();
+        let address = object
+            .symbols()
+            .find(|symbol| {
+                symbol.name().is_ok_and(|name| {
+                    name.contains("verifies_elf_hash_and_decodes_both_report_encodings")
+                }) && symbol.kind() == object::SymbolKind::Text
+            })
+            .unwrap()
+            .address();
         let header = Header {
             build_identifier: identifier,
+            program_counter: address,
+            link_register: address,
             ..Header::new(RecordKind::KernelPanic, Architecture::NativeX86_64)
         };
         let mut slot = [0; 512];
         let mut writer = Writer::new(&mut slot, &header, Limits::NATIVE).unwrap();
-        let object = parse_elf(&executable).unwrap();
-        writer.push_frame(object.entry());
+        writer.push_frame(address);
         let bytes = writer.finish(format_args!("test panic"), &[], |_| Some(0));
 
         let encoded = STANDARD.encode(bytes);
@@ -238,11 +249,29 @@ mod tests {
         let mut damaged = bytes.to_vec();
         *damaged.last_mut().unwrap() ^= 1;
         assert!(report_bytes(damaged).is_err());
+        let mut extra = bytes.to_vec();
+        extra.push(0);
+        assert!(
+            report_bytes(extra)
+                .unwrap_err()
+                .to_string()
+                .contains("Data follows")
+        );
+        assert!(parse_elf(b"not an ELF").is_err());
+        assert!(find_elf(Path::new("."), BuildIdentifier::None).is_err());
 
         let report = Record::read(bytes).unwrap();
         let decoded = decode(&report, &executable, false, false).unwrap();
         assert!(decoded.identifier_matches);
-        assert_eq!(decoded.addresses[0].elf_address, Some(object.entry()));
+        assert_eq!(decoded.addresses[0].elf_address, Some(address));
+        assert!(decoded.addresses[0].locations.iter().any(|location| {
+            location
+                .function
+                .as_ref()
+                .is_some_and(|name| name.contains("verifies_elf_hash"))
+                && location.file.is_some()
+                && location.line.is_some()
+        }));
         let mut mismatched = executable.clone();
         mismatched.push(0);
         assert!(decode(&report, &mismatched, false, false).is_err());

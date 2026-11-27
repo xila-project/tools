@@ -22,3 +22,9 @@ object = { version = "0.37", default-features = false, features = [
 ] }
 rustc-demangle = "0.1"
 sha2 = "0.11"
+
+[dev-dependencies]
+object = { version = "0.37", default-features = false, features = [
+  "write_std",
+  "elf",
+] }

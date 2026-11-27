@@ -64,12 +64,26 @@ fn selects_elf_and_decodes_binary_and_pasted_reports() {
     let header = Header {
         target_name: "test-host",
         program_counter: object.entry() + offset,
+        link_register: 1,
         code_load_offset: offset,
         build_identifier: BuildIdentifier::ElfSha256(Sha256::digest(&executable).into()),
         ..Header::new(RecordKind::KernelPanic, Architecture::NativeX86_64)
     };
     let path = directory.join("report.xcr");
     fs::write(&path, report(&header)).unwrap();
+    let output = decode(
+        &[
+            path.as_os_str(),
+            "--elf".as_ref(),
+            elf.as_os_str(),
+            "--json".as_ref(),
+        ],
+        None,
+    );
+    assert!(output.status.success());
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["build_identifier_kind"], "elf_sha256");
+
     let output = decode(
         &[
             path.as_os_str(),
@@ -120,6 +134,8 @@ fn selects_elf_and_decodes_binary_and_pasted_reports() {
     assert_eq!(json["identifier_matches"], true);
     assert_eq!(json["build_identifier_kind"], identifier_kind);
     assert_eq!(json["addresses"][0]["elf_address"], object.entry());
+    assert_eq!(json["addresses"][1]["runtime_address"], 1);
+    assert!(json["addresses"][1]["elf_address"].is_null());
     assert_eq!(json["log_tail"], "Last log\n");
     fs::write(
         &path,
@@ -174,6 +190,24 @@ fn rejects_missing_identifiers_and_excess_input() {
     let output = decode(&["-".as_ref()], Some(&encoded));
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("Specify --elf or --elf-directory"));
+
+    let wasm = STANDARD.encode(report(&Header {
+        build_identifier: BuildIdentifier::WasmFingerprint([1; 32]),
+        ..header
+    }));
+    let output = decode(
+        &[
+            "-".as_ref(),
+            "--elf".as_ref(),
+            elf,
+            "--allow-mismatch".as_ref(),
+            "--json".as_ref(),
+        ],
+        Some(&wasm),
+    );
+    assert!(output.status.success());
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["build_identifier_kind"], "wasm_fingerprint");
 
     let oversized = "A".repeat(2 * xila_crash::NATIVE_RECORD_CAPACITY + 1);
     let output = decode(&["-".as_ref(), "--elf".as_ref(), elf], Some(&oversized));
