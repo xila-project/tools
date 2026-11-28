@@ -8,6 +8,8 @@ repository.workspace = true
 description = "The xila command line: Xila developer tools for file system images and packages"
 
 [dependencies]
+crash = { package = "xila-tools-crash", path = "../crash" }
+serde_json = "1.0"
 image = { workspace = true }
 package_builder = { workspace = true }
 getargs = { workspace = true }
@@ -22,3 +24,12 @@ name = "xila_tools"
 [[bin]]
 name = "xila"
 path = "src/main.rs"
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+base64 = "0.22"
+object = { version = "0.37", default-features = false, features = [
+  "elf",
+  "read_core",
+] }
+sha2 = "0.11"
+xila_crash = { package = "xila-crash", git = "https://github.com/xila-project/core", branch = "main" }

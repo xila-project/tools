@@ -95,6 +95,21 @@ xila package bundle build ./weather ./Weather.app
 xila package bundle archive ./Weather.app ./Weather.xpk
 ```
 
+### Crash reports
+
+Use the ELF file from the exact firmware or native build that produced the
+report. The decoder checks the build identifier before it resolves addresses.
+Use `--allow-mismatch` with `--elf` to proceed when the identifier is missing.
+
+```sh
+xila crash decode report.xcr --elf firmware.elf
+xila crash decode report.xcr --elf-directory ./firmware-builds --json
+xila crash decode - --elf firmware.elf < report.base64
+```
+
+The report can be binary or Base64. Use `--unwind-stack` to use the saved
+stack window and ELF `.debug_frame` rules when the report already has frames.
+
 ## Workspace
 
 | Crate | Responsibility |
