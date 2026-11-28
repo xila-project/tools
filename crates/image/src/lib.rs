@@ -484,7 +484,7 @@ mod tests {
     impl Mounted {
         /// Mount `drive` with the firmware's LittleFS options, closing it on
         /// failure.
-        fn new(drive: &'static dyn DirectBlockDevice) -> file_system::Result<Self> {
+        fn new(drive: &'static dyn DirectBlockDevice) -> io_error::Result<Self> {
             match little_fs::FileSystem::new(
                 drive,
                 little_fs::Options::new(256).set_block_cycles(500),
@@ -518,7 +518,7 @@ mod tests {
 
     /// Mount `path` as the firmware mounts its flash partition: a block device
     /// with `block_size`-byte blocks and the firmware's LittleFS options.
-    fn mount_flash(path: &Path, block_size: u32) -> file_system::Result<Mounted> {
+    fn mount_flash(path: &Path, block_size: u32) -> io_error::Result<Mounted> {
         Mounted::new(Box::leak(Box::new(
             FileDrive::open_with_block_size(path, block_size)
                 .unwrap()
@@ -538,7 +538,7 @@ mod tests {
             context: &mut std::task::Context<'_>,
             buffer: &mut [u8],
             position: file_system::Size,
-        ) -> std::task::Poll<file_system::Result<usize>> {
+        ) -> std::task::Poll<io_error::Result<usize>> {
             self.0.read(context, buffer, position)
         }
 
@@ -547,7 +547,7 @@ mod tests {
             _: &mut std::task::Context<'_>,
             buffer: &[u8],
             position: file_system::Size,
-        ) -> std::task::Poll<file_system::Result<usize>> {
+        ) -> std::task::Poll<io_error::Result<usize>> {
             file_system::ready(|| {
                 let mut current = vec![0; buffer.len()];
                 self.0.read_sync(&mut current, position)?;
@@ -556,7 +556,7 @@ mod tests {
                     .zip(buffer)
                     .any(|(&old, &new)| new & !old != 0)
                 {
-                    return Err(file_system::IoErrorKind::InputOutput);
+                    return Err(io_error::Kind::InputOutput);
                 }
                 self.0.write_sync(buffer, position)
             })
@@ -565,7 +565,7 @@ mod tests {
         fn flush(
             &self,
             context: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<file_system::Result<()>> {
+        ) -> std::task::Poll<io_error::Result<()>> {
             self.0.flush(context)
         }
 
@@ -575,13 +575,13 @@ mod tests {
             command: file_system::ControlCommandIdentifier,
             input: &shared::AnyByLayout,
             output: &mut shared::AnyByLayout,
-        ) -> std::task::Poll<file_system::Result<()>> {
+        ) -> std::task::Poll<io_error::Result<()>> {
             self.0.control(context, command, input, output)
         }
     }
 
     impl file_system::MountOperations for NorFlashDrive {
-        fn unmount(&self) -> file_system::Result<()> {
+        fn unmount(&self) -> io_error::Result<()> {
             self.0.unmount()
         }
     }
@@ -589,7 +589,7 @@ mod tests {
     impl DirectBlockDevice for NorFlashDrive {}
 
     /// Mount `path` on a [`NorFlashDrive`] with 4096-byte blocks.
-    fn mount_nor_flash(path: &Path) -> file_system::Result<Mounted> {
+    fn mount_nor_flash(path: &Path) -> io_error::Result<Mounted> {
         Mounted::new(Box::leak(Box::new(NorFlashDrive(
             FileDrive::open_with_block_size(path, FLASH_BLOCK_SIZE)
                 .unwrap()
@@ -602,7 +602,7 @@ mod tests {
         file_system: &little_fs::FileSystem,
         path: &str,
         content: &[u8],
-    ) -> file_system::Result<()> {
+    ) -> io_error::Result<()> {
         use file_system::{AccessFlags, Attributes, BaseOperations, Context, FileSystemOperations};
 
         file_system.create_file(path.as_ref(), &Attributes::new())?;
