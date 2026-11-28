@@ -1,10 +1,11 @@
 //! A block device backed by a host file, for building images on the host.
 
 use file_system::{
-    ControlCommand, ControlCommandIdentifier, DirectBaseOperations, DirectBlockDevice, IoErrorKind,
+    ControlCommand, ControlCommandIdentifier, DirectBaseOperations, DirectBlockDevice,
     MountOperations, Size,
     block_device::{ERASE, GET_BLOCK_COUNT, GET_BLOCK_SIZE},
 };
+use io_error::Kind;
 use shared::AnyByLayout;
 use std::{
     fs::{File, OpenOptions},
@@ -18,7 +19,7 @@ use std::{
 /// opened with [`FileDrive::open_with_block_size`].
 ///
 /// The file is never created or resized: create it with its final size first.
-/// Reads and writes outside the file fail with [`IoErrorKind::InvalidArgument`]
+/// Reads and writes outside the file fail with [`Kind::InvalidArgument`]
 /// instead of being shortened or extending it, and they transfer the whole
 /// buffer or fail. [`FileDrive::close`] releases the file even when the drive
 /// itself must stay alive, as LittleFS requires `'static` devices.
@@ -119,7 +120,7 @@ impl FileDrive {
         self.block_size
     }
 
-    /// Close the file. Later operations fail with [`IoErrorKind::DeviceUnavailable`].
+    /// Close the file. Later operations fail with [`Kind::DeviceUnavailable`].
     pub fn close(&self) {
         if let Ok(mut file) = self.file.lock() {
             file.take();
@@ -129,22 +130,22 @@ impl FileDrive {
     fn with_file<T>(
         &self,
         operation: impl FnOnce(&mut OpenFile) -> io::Result<T>,
-    ) -> file_system::Result<T> {
+    ) -> io_error::Result<T> {
         let mut guard: MutexGuard<'_, Option<OpenFile>> =
-            self.file.lock().map_err(|_| IoErrorKind::ResourceBusy)?;
-        let file = guard.as_mut().ok_or(IoErrorKind::DeviceUnavailable)?;
+            self.file.lock().map_err(|_| Kind::ResourceBusy)?;
+        let file = guard.as_mut().ok_or(Kind::DeviceUnavailable)?;
         operation(file).map_err(io_error::map_std_error)
     }
 
     /// Write `pattern` `count` times from `position`.
-    fn fill(&self, pattern: &[u8], count: usize, position: Size) -> file_system::Result<usize> {
+    fn fill(&self, pattern: &[u8], count: usize, position: Size) -> io_error::Result<usize> {
         if pattern.is_empty() || count == 0 {
             return Ok(0);
         }
         let length = pattern
             .len()
             .checked_mul(count)
-            .ok_or(IoErrorKind::InvalidArgument)?;
+            .ok_or(Kind::InvalidArgument)?;
         // Whole repetitions of the pattern, so that every chunk starts with
         // its first byte.
         let mut buffer = [0_u8; Self::PATTERN_BUFFER_SIZE];
@@ -174,10 +175,10 @@ impl FileDrive {
     ///
     /// The range is checked against the open file first, even when empty, and
     /// erased in chunks, so that its size is not limited by `usize`.
-    fn erase_range(&self, position: Size, size: Size) -> file_system::Result<()> {
+    fn erase_range(&self, position: Size, size: Size) -> io_error::Result<()> {
         let block_size = Size::from(self.block_size);
         if !position.is_multiple_of(block_size) || !size.is_multiple_of(block_size) {
-            return Err(IoErrorKind::InvalidArgument);
+            return Err(Kind::InvalidArgument);
         }
         self.with_file(|file| {
             file.seek_within(position, size)?;
@@ -199,7 +200,7 @@ impl DirectBaseOperations for FileDrive {
         _: &mut Context<'_>,
         buffer: &mut [u8],
         position: Size,
-    ) -> Poll<file_system::Result<usize>> {
+    ) -> Poll<io_error::Result<usize>> {
         // `read_exact` and `write_all` retry `ErrorKind::Interrupted`.
         file_system::ready(|| {
             self.with_file(|file| {
@@ -215,7 +216,7 @@ impl DirectBaseOperations for FileDrive {
         _: &mut Context<'_>,
         buffer: &[u8],
         position: Size,
-    ) -> Poll<file_system::Result<usize>> {
+    ) -> Poll<io_error::Result<usize>> {
         file_system::ready(|| {
             self.with_file(|file| {
                 file.seek_within(position, buffer.len() as Size)?;
@@ -231,11 +232,11 @@ impl DirectBaseOperations for FileDrive {
         pattern: &[u8],
         count: usize,
         position: Size,
-    ) -> Poll<file_system::Result<usize>> {
+    ) -> Poll<io_error::Result<usize>> {
         file_system::ready(|| self.fill(pattern, count, position))
     }
 
-    fn flush(&self, _: &mut Context<'_>) -> Poll<file_system::Result<()>> {
+    fn flush(&self, _: &mut Context<'_>) -> Poll<io_error::Result<()>> {
         file_system::ready(|| self.with_file(|file| file.file.sync_all()))
     }
 
@@ -245,7 +246,7 @@ impl DirectBaseOperations for FileDrive {
         command: ControlCommandIdentifier,
         input: &AnyByLayout,
         output: &mut AnyByLayout,
-    ) -> Poll<file_system::Result<()>> {
+    ) -> Poll<io_error::Result<()>> {
         file_system::ready(|| match command {
             GET_BLOCK_SIZE::IDENTIFIER => {
                 *GET_BLOCK_SIZE::cast_output(output)? = self.block_size;
@@ -260,7 +261,7 @@ impl DirectBaseOperations for FileDrive {
                 let range = ERASE::cast_input(input)?;
                 self.erase_range(range.position, range.size)
             }
-            _ => Err(IoErrorKind::Unsupported),
+            _ => Err(Kind::Unsupported),
         })
     }
 }
@@ -269,14 +270,14 @@ impl DirectBaseOperations for FileDrive {
 /// that Core's `GET_BLOCK_COUNT` reports. A block size of 0 is an invalid
 /// argument; `open_with_block_size` already rejects it, so this is a defensive
 /// check only.
-fn block_count(length: u64, block_size: u32) -> file_system::Result<Size> {
+fn block_count(length: u64, block_size: u32) -> io_error::Result<Size> {
     length
         .checked_div(Size::from(block_size))
-        .ok_or(IoErrorKind::InvalidArgument)
+        .ok_or(Kind::InvalidArgument)
 }
 
 impl MountOperations for FileDrive {
-    fn unmount(&self) -> file_system::Result<()> {
+    fn unmount(&self) -> io_error::Result<()> {
         self.close();
         Ok(())
     }
@@ -318,12 +319,12 @@ mod tests {
                 AnyByLayout::NONE,
                 AnyByLayout::from_mutable(&mut output),
             ),
-            Err(IoErrorKind::Unsupported)
+            Err(Kind::Unsupported)
         );
         drive.unmount().unwrap();
         assert_eq!(
             drive.read_sync(&mut buffer, 0),
-            Err(IoErrorKind::DeviceUnavailable)
+            Err(Kind::DeviceUnavailable)
         );
         std::fs::remove_file(path).unwrap();
     }
@@ -335,19 +336,16 @@ mod tests {
         let mut buffer = [0; 8];
         assert_eq!(
             drive.read_sync(&mut buffer, 2044),
-            Err(IoErrorKind::InvalidArgument)
+            Err(Kind::InvalidArgument)
         );
         assert_eq!(
             drive.read_sync(&mut buffer, u64::MAX),
-            Err(IoErrorKind::InvalidArgument)
+            Err(Kind::InvalidArgument)
         );
-        assert_eq!(
-            drive.write_sync(&buffer, 2041),
-            Err(IoErrorKind::InvalidArgument)
-        );
+        assert_eq!(drive.write_sync(&buffer, 2041), Err(Kind::InvalidArgument));
         assert_eq!(
             drive.write_pattern_sync(&[0xFF], 513, 3 * 512),
-            Err(IoErrorKind::InvalidArgument)
+            Err(Kind::InvalidArgument)
         );
         assert_eq!(drive.write_sync(&buffer, 2040).unwrap(), 8);
         assert_eq!(drive.read_sync(&mut buffer, 2040).unwrap(), 8);
@@ -402,7 +400,7 @@ mod tests {
                 Ok(u64::from(u32::MAX) + 1)
             );
         }
-        assert_eq!(block_count(4096, 0), Err(IoErrorKind::InvalidArgument));
+        assert_eq!(block_count(4096, 0), Err(Kind::InvalidArgument));
     }
 
     #[test]
@@ -448,12 +446,12 @@ mod tests {
         ] {
             assert_eq!(
                 drive.erase(position, size),
-                Err(IoErrorKind::InvalidArgument),
+                Err(Kind::InvalidArgument),
                 "{position} {size}"
             );
         }
         drive.unmount().unwrap();
-        assert_eq!(drive.erase(0, 0), Err(IoErrorKind::DeviceUnavailable));
+        assert_eq!(drive.erase(0, 0), Err(Kind::DeviceUnavailable));
         let mut expected = vec![0; 4 * 4096];
         expected[4096..3 * 4096].fill(FileDrive::ERASED_FLASH_VALUE);
         assert_eq!(std::fs::read(&path).unwrap(), expected);
