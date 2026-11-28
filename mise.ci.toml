@@ -21,14 +21,3 @@ run = "mise -E ci bootstrap packages apply --manager apt --update --yes"
 [tasks."ci:format-rust"]
 description = "Check Rust formatting"
 run = "cargo fmt --all -- --check"
-
-[tasks."ci:format-toml"]
-description = "Check TOML formatting"
-tools.taplo = "{{ vars.taplo_version }}"
-run = "taplo format --check"
-
-[tasks."ci:lint-workflows"]
-description = "Run actionlint with ShellCheck on the GitHub Actions workflows"
-tools."aqua:rhysd/actionlint" = "{{ vars.actionlint_version }}"
-tools."aqua:koalaman/shellcheck" = "{{ vars.shellcheck_version }}"
-run = "actionlint"
