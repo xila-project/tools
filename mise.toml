@@ -7,6 +7,16 @@ taplo_version = "0.10.0"
 actionlint_version = "1.7.7"
 shellcheck_version = "0.11.0"
 
+[settings]
+# Mise requires this setting for a task include from a git source.
+experimental = true
+
+[task_config]
+# Tasks shared by the Xila repositories. Move the commit with the workspace.
+includes = [
+  "git::https://github.com/xila-project/workspace.git//mise/shared_tasks.toml?ref=eebda4562ddd22b6ad04e9d570d8e8b19d0a8b1d",
+]
+
 [tools]
 rust = { version = "{{ vars.rust_version }}", profile = "minimal", components = [
   "clippy",
